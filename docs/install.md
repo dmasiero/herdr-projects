@@ -13,7 +13,8 @@ herdr plugin install eliasstravik/herdr-projects
 - Herdr 0.9.3 or newer. Your **running** Herdr server must be 0.9.3 or newer too: an older one refuses the plugin until
   it is restarted.
 - `git`, and `curl` or `wget` to download the program.
-- Optional: `gh` (pull requests) and `tailscale` (private review links).
+- Optional: `gh` (pull requests on GitHub) or `tea` (pull requests on [Gitea](gitea.md)), and `tailscale` (private
+  review links).
 
 No Node, no npm: the board is one program.
 

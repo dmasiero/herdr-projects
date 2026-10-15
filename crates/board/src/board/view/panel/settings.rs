@@ -80,7 +80,12 @@ pub fn settings(k: &mut Kit, c: &Ctx, r: &Obj) -> Drawn {
     if applies("check.command") { row("Check", vec![it(if check == "none" { "no command".into() } else { check }, &["check.command"]), it(format!("{} at most", sval("check.timeout")), &["check.timeout"]), it(if val("check.again").is_null() || sval("check.again") == "none" { String::new() } else { format!("fix rounds: {}", sval("check.again")) }, &["check.again"])], false, false); }
     let research = crate::research::is_research(r);
     if research { row("Research", vec![it("only · no change to the repo".into(), &["research.only"])], false, false); }
-    else { row("Merge", vec![it(if sval("merge.by") == "itself" { "by itself, once it passes".into() } else { "after your yes".into() }, &["merge.by"]), if applies("merge.method") { it(sval("merge.method"), &["merge.method"]) } else { None }, if applies("merge.pr") { it(if val("merge.pr") == json!(false) { "no pull request".into() } else { "opens a pull request".into() }, &["merge.pr"]) } else { None }, if applies("merge.checks") && applies("merge.pr") && val("merge.pr") != json!(false) { it(if sval("merge.checks") == "none" { "GitHub's checks ignored".into() } else { "waits for GitHub's checks".into() }, &["merge.checks"]) } else { None }], false, false); }
+    else {
+        // The forge is named only where `merge.forge` says it (auto is worked out from the remote, forge.rs).
+        let forge = match sval("merge.forge").as_str() { "gitea" => "Gitea", "github" => "GitHub", _ => "" };
+        let checks_on = if forge.is_empty() { "GitHub" } else { forge };
+        row("Merge", vec![it(if sval("merge.by") == "itself" { "by itself, once it passes".into() } else { "after your yes".into() }, &["merge.by"]), if applies("merge.method") { it(sval("merge.method"), &["merge.method"]) } else { None }, if applies("merge.pr") { it(if val("merge.pr") == json!(false) { "no pull request".into() } else { "opens a pull request".into() }, &["merge.pr"]) } else { None }, if applies("merge.forge") && !forge.is_empty() { it(format!("on {forge}"), &["merge.forge"]) } else { None }, if applies("merge.checks") && applies("merge.pr") && val("merge.pr") != json!(false) { it(if sval("merge.checks") == "none" { format!("{checks_on}'s checks ignored") } else { format!("waits for {checks_on}'s checks") }, &["merge.checks"]) } else { None }], false, false);
+    }
     let time = if val("limit.time").is_null() { "none".to_string() } else { sval("limit.time") };
     let most = if val("limit.tokens").is_null() { "none".to_string() } else { sval("limit.tokens") };
     let limited = time != "none" || most != "none" || from(&["limit.time", "limit.tokens"]);

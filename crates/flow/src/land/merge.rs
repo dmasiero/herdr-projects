@@ -148,6 +148,7 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
     if t.b("pr") {
         // By number, not link: gh then uses the repo's own remote for the host.
         let pr = pr_number(t.s("pr"));
+        let fw = crate::forge::words_of_pr(t.s("pr"));
         // Only the commit that was checked and reviewed here may merge.
         let reviewed = t.at("mergeIntent").t("verifiedHead");
         if !reviewed.is_empty() {
@@ -176,16 +177,16 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
             let v: Value = super::readable::pr_view(&root, &pr, "reviewDecision").map(|r| r.view).unwrap_or(json!({}));
             let states: Vec<String> = v.arr("statusCheckRollup").iter().map(|c| if c.b("conclusion") { c.t("conclusion") } else { c.t("state") }.to_uppercase()).collect();
             let waiting = !states.iter().any(|s| CHECK_BAD.contains(&s.as_str())) && v.s("reviewDecision") != "CHANGES_REQUESTED" && (states.iter().any(|s| !CHECK_GOOD.contains(&s.as_str())) || v.s("reviewDecision") == "REVIEW_REQUIRED");
-            if waiting { g.set(|t| { t.put("failure", Value::Null); t.put("autoMerge", true); t.put("autoMergeLocal", true); let m = format!("Approved: merges when GitHub's checks pass ({})", t.s("pr")); t.put("msg", m); })?; return Ok(()); }
+            if waiting { g.set(|t| { t.put("failure", Value::Null); t.put("autoMerge", true); t.put("autoMergeLocal", true); let m = format!("Approved: merges when {}'s checks pass ({})", fw.name, t.s("pr")); t.put("msg", m); })?; return Ok(()); }
             let out = [m.stdout.trim(), m.stderr.trim()].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join("\n");
-            return fail(g, "Pull request could not merge", &format!("Pull request: {}\nBranch: {}\n\ngh pr merge:\n{out}\n\nNo check is still running and no review is awaited, so there is nothing to wait for.", t.s("pr"), if t.b("branch") { t.s("branch") } else { "unknown" }), "Inspect the pull request's base branch, conflicts and checks. Resolve branch conflicts in your own worktree, or fix failed checks, then finish again. Approval is required before retrying the merge.", Fail::default());
+            return fail(g, "Pull request could not merge", &format!("Pull request: {}\nBranch: {}\n\n{} pr merge:\n{out}\n\nNo check is still running and no review is awaited, so there is nothing to wait for.", t.s("pr"), if t.b("branch") { t.s("branch") } else { "unknown" }, fw.cli), "Inspect the pull request's base branch, conflicts and checks. Resolve branch conflicts in your own worktree, or fix failed checks, then finish again. Approval is required before retrying the merge.", Fail::default());
         }
         // Bring your checkout along when that is safe.
         if git_slow(&root, &["fetch", "origin"], 60000).is_ok() && git_out(&root, &["status", "--porcelain", "--untracked-files=no"]).map(|s| s.is_empty()).unwrap_or(false) { let _ = git_out(&root, &["merge", "--ff-only", "@{upstream}"]); }
         // gh answering "fine" is not "merged": on a repo with a merge queue it only lines the pull request up.
         let seen = serde_json::from_str::<Value>(&gh(&["pr", "view", &pr, "--json", "state,mergeCommit"], &root, 60000).stdout).unwrap_or(Value::Null);
         let state = seen.t("state");
-        if state != "MERGED" { g.set(|t| { t.put("failure", Value::Null); t.put("autoMerge", true); t.put("autoMergeLocal", false); let m = format!("Approved: GitHub merges it when its checks and merge queue are through ({})", t.s("pr")); t.put("msg", m); })?; return Ok(()); }
+        if state != "MERGED" { g.set(|t| { t.put("failure", Value::Null); t.put("autoMerge", true); t.put("autoMergeLocal", false); let m = format!("Approved: {} merges it when its checks and merge queue are through ({})", fw.name, t.s("pr")); t.put("msg", m); })?; return Ok(()); }
         flow::git::drop_remote_branch(&root, t.s("branch"), &reviewed);
         let head = if reviewed.is_empty() { t.t("prHead") } else { reviewed.clone() };
         return landed(id, g, &t, &format!("Merged: {}", t.s("pr")), &head, &seen.at("mergeCommit").t("oid"));

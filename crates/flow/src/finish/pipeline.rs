@@ -214,14 +214,21 @@ pub fn pipeline(id: &str, g: &mut Guard, text: &str, keep_intent: bool, reason: 
             Ok(None) => {}
             Err(e) if is_aborted(&e) => return Err(e),
             Err(_) if already::archived(Path::new(&tree)) => { fail(g, already::archived_failure(t.s("branch"), &tree), FailHow::default())?; return Ok(()); }
-            Err(e) if e.msg.starts_with("prbase:") => { fail(g, failure("pr", "The agent's pull request merges into another branch", &format!("Branch: {}\nFolder: {tree}\n\n{}", t.s("branch"), &e.msg[7..]), &format!("Change that pull request's base to {0} (gh pr edit <number> --base {0}), or close it, then finish again. The board goes on with it once it merges into {0}.", sync::main_branch(&root, &t))), FailHow::default())?; return Ok(()); }
+            Err(e) if e.msg.starts_with("prbase:") => {
+                let base = sync::main_branch(&root, &t);
+                let how = if crate::forge::cli_of(&root).0 == "gh" { format!(" (gh pr edit <number> --base {base})") } else { " on Gitea".into() };
+                fail(g, failure("pr", "The agent's pull request merges into another branch", &format!("Branch: {}\nFolder: {tree}\n\n{}", t.s("branch"), &e.msg[7..]), &format!("Change that pull request's base to {base}{how}, or close it, then finish again. The board goes on with it once it merges into {base}.")), FailHow::default())?; return Ok(());
+            }
             // The remote cannot be reached (main could not be fetched either): it waits, and goes on by itself.
             Err(e) if offline(sync_r, &e.msg) => {
                 let (what, said) = if let Some(m) = e.msg.strip_prefix("pr:") { ("its pull request could not be opened", m) } else { ("the branch could not be pushed", e.msg.as_str()) };
                 let why = match sync_r.filter(|r| r.status == "error") { Some(r) => format!("{}, and {what}", sync::held_why(r)), None => format!("{what} ({})", fetch::plain(said, t.s("branch"))) };
                 return super::sync_job::unpushed(g, &why, &format!("Branch: {}\nFolder: {tree}\n\n{}\n\n{said}", t.s("branch"), sync_r.map(|r| r.detail.as_str()).unwrap_or("")));
             }
-            Err(e) if e.msg.starts_with("pr:") => { fail(g, failure("pr", "Could not open the pull request", &format!("Branch: {}\nFolder: {tree}\n\ngh pr create:\n{}", t.s("branch"), &e.msg[3..]), "Inspect the GitHub error, fix what you safely can, then finish again. The board retries opening the pull request; do not push or ship manually."), FailHow::default())?; return Ok(()); }
+            Err(e) if e.msg.starts_with("pr:") => {
+                let (cli, name) = crate::forge::cli_of(&root);
+                fail(g, failure("pr", "Could not open the pull request", &format!("Branch: {}\nFolder: {tree}\n\n{cli} pr create:\n{}", t.s("branch"), &e.msg[3..]), &format!("Inspect the {name} error, fix what you safely can, then finish again. The board retries opening the pull request; do not push or ship manually.")), FailHow::default())?; return Ok(());
+            }
             Err(e) => { fail(g, failure("push", "Could not push the branch", &format!("Branch: {}\nFolder: {tree}\n\n{}", t.s("branch"), e.msg), "Inspect the Git error and fix what you safely can without altering the human's checkout. Finish again so the board retries the push."), FailHow::default())?; return Ok(()); }
         }
     }

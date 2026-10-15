@@ -132,6 +132,9 @@ checkout with unsaved files is never forced. Merging without your yes: [merging 
 With `merge.checks: github`, a pull request merges only once its checks on GitHub pass, by itself or on your yes, in
 every repo the board merges in. `merge.checks: none` does not look at GitHub's checks.
 
+A repo on Gitea opens and merges its pull requests through `tea`, and waits for its commit statuses instead:
+[Gitea](gitea.md).
+
 | GitHub's checks are | The board |
 |---|---|
 | still running | waits. The row says how far: `Waiting for GitHub checks · 2 of 3 passed`, with the board's own `◇` (nobody works on it meanwhile). It merges by itself once they pass |
