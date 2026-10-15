@@ -194,7 +194,10 @@ pub fn pipeline(id: &str, g: &mut Guard, text: &str, keep_intent: bool, reason: 
             Ok(None) => {}
             Err(e) if is_aborted(&e) => return Err(e),
             Err(_) if already::archived(Path::new(&tree)) => { fail(g, already::archived_failure(t.s("branch"), &tree), FailHow::default())?; return Ok(()); }
-            Err(e) if e.msg.starts_with("pr:") => { fail(g, failure("pr", "Could not open the pull request", &format!("Branch: {}\nFolder: {tree}\n\ngh pr create:\n{}", t.s("branch"), &e.msg[3..]), "Inspect the GitHub error, fix what you safely can, then finish again. The board retries opening the pull request; do not push or ship manually."), FailHow::default())?; return Ok(()); }
+            Err(e) if e.msg.starts_with("pr:") => {
+                let (cli, name) = crate::forge::cli_of(&root);
+                fail(g, failure("pr", "Could not open the pull request", &format!("Branch: {}\nFolder: {tree}\n\n{cli} pr create:\n{}", t.s("branch"), &e.msg[3..]), &format!("Inspect the {name} error, fix what you safely can, then finish again. The board retries opening the pull request; do not push or ship manually.")), FailHow::default())?; return Ok(());
+            }
             Err(e) => { fail(g, failure("push", "Could not push the branch", &format!("Branch: {}\nFolder: {tree}\n\n{}", t.s("branch"), e.msg), "Inspect the Git error and fix what you safely can without altering the human's checkout. Finish again so the board retries the push."), FailHow::default())?; return Ok(()); }
         }
     }

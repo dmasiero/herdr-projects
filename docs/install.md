@@ -1,7 +1,7 @@
 # Installing, the first run, and taking it out again
 
 Linux or macOS, on x86_64 or aarch64. Needs herdr 0.9.3 or newer and `git`; `curl` or `wget` to download the
-program; optionally `gh` (pull requests) and `tailscale` (private review links). No Node, no npm: the board is one
+program; optionally `gh` (pull requests on GitHub) or `tea` (pull requests on Gitea: [Gitea](gitea.md)) and `tailscale` (private review links). No Node, no npm: the board is one
 program.
 
 ```sh

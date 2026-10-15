@@ -167,7 +167,8 @@ and a check listed on the commit before and gone from the list now has not passe
 says `Waiting for GitHub checks to start` where an outside CI reports in the repo (on the newest commit of the branch it
 merges into, or on its other pull requests); a question GitHub cannot answer counts as yes. All of these wait at most
 `check.timeout`, then for you, with the reason. A repo with no checks at all merges with none listed. `merge.checks:
-none` does not look at GitHub's checks.
+none` does not look at GitHub's checks. A repo on Gitea has its pull requests opened and merged through `tea`, and
+waits for its commit statuses instead: [Gitea](gitea.md).
 
 **A fine-grained GitHub token is enough.** Such a token cannot have the Checks permission (GitHub offers it to GitHub
 Apps only), so GitHub refuses it its list of a pull request's checks. The board then reads them from what the token

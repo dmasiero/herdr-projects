@@ -31,7 +31,7 @@ fn unread(id: &str, said: &str) {
     let _ = update_wait(id, 10000, |t| {
         if !t.b("autoMerge") || !t.b("checksWait") || runner_alive(t) { return Ok(Change::Keep); }
         if checks::overdue(t) { land = true; t.put("autoMerge", false); t.put("autoMergeLocal", false); t.put("msg", "Merging"); }
-        else { t.put("msg", format!("Waiting for GitHub checks · could not read them ({why})")); }
+        else { let on = crate::forge::words_of_pr(t.s("pr")).name; t.put("msg", format!("Waiting for {on} checks · could not read them ({why})")); }
         Ok(Change::Write)
     });
     if land { spawn_runner("land", id, &[]); }
@@ -41,6 +41,8 @@ enum Then { Nothing, Merged, Closed, Unreviewed, Land, Wake }
 
 fn poll_one(id: &str, pr: &str, j: &Value, via: &str) {
     let root = folder_of(id);
+    let fw = crate::forge::words_of_pr(pr);
+    let tea = fw.cli == "tea";
     let mut then = Then::Nothing;
     // What was merged is the pull request's head, not whatever the local branch holds by now: a commit made here since
     // (never pushed, or pushed after the merge) landed nowhere, so its branch and worktree are not thrown away.
@@ -78,8 +80,9 @@ fn poll_one(id: &str, pr: &str, j: &Value, via: &str) {
         if j.s("state") == "CLOSED" && t.b("autoMerge") {
             t.put("autoMerge", false); t.put("autoMergeLocal", false); t.put("stage", "approval"); t.put("mergeFailed", true); t.put("mergeIntent", Value::Null); t.put("requireApproval", true); t.put("prState", "closed");
             t.put("msg", "Pull request was closed without merging");
-            let detail = format!("Pull request: {pr}\nBranch: {}\n\nGitHub reports it as closed, not merged. The approved merge did not happen.", t.so("branch").unwrap_or("unknown"));
-            for (k, v) in failure_patch(&obj(json!({ "stage": "merge", "title": "Pull request was closed without merging", "detail": detail, "next": "Reopen the pull request (gh pr reopen) and approve again, or open a new one from the task's branch. Nothing was cleaned up; the work is still on its branch.", "agentCanFix": false, "auth": false }))) { t.insert(k, v); }
+            let detail = format!("Pull request: {pr}\nBranch: {}\n\n{} reports it as closed, not merged. The approved merge did not happen.", t.so("branch").unwrap_or("unknown"), fw.name);
+            let reopen = if tea { format!("tea pr reopen {}", pr_number(pr)) } else { "gh pr reopen".into() };
+            for (k, v) in failure_patch(&obj(json!({ "stage": "merge", "title": "Pull request was closed without merging", "detail": detail, "next": format!("Reopen the pull request ({reopen}) and approve again, or open a new one from the task's branch. Nothing was cleaned up; the work is still on its branch."), "agentCanFix": false, "auth": false }))) { t.insert(k, v); }
             then = Then::Closed;
             return Ok(Change::Write);
         }
@@ -116,10 +119,11 @@ fn poll_one(id: &str, pr: &str, j: &Value, via: &str) {
         let new_feedback = !others.is_empty() && feedback != (if t.has("prFeedbackSeen") { t.t("prFeedbackSeen") } else { "[]".into() });
         t.put("prFeedbackSeen", feedback);
         let decision = j.s("reviewDecision");
+        let read = if tea { format!("tea pr {} --comments", pr_number(pr)) } else { "gh pr view --comments".into() };
         let reason = if !failed.is_empty() { checks::failed_why(pr, &failed) }
-            else if decision == "CHANGES_REQUESTED" { format!("A reviewer asked for changes on the pull request {pr}. Read the review (gh pr view --comments) and address it on your branch.") } else { String::new() };
-        let why = if !reason.is_empty() { format!("{reason}{}", if others.is_empty() { "" } else { " Comments are also available for context (gh pr view --comments)." }) }
-            else if new_feedback { format!("New feedback on the pull request {pr}. Read the comments (gh pr view --comments) and address what they ask for on your branch; if nothing needs changing, say so and finish.") } else { String::new() };
+            else if decision == "CHANGES_REQUESTED" { format!("A reviewer asked for changes on the pull request {pr}. Read the review ({read}) and address it on your branch.") } else { String::new() };
+        let why = if !reason.is_empty() { format!("{reason}{}", if others.is_empty() { String::new() } else { format!(" Comments are also available for context ({read}).") }) }
+            else if new_feedback { format!("New feedback on the pull request {pr}. Read the comments ({read}) and address what they ask for on your branch; if nothing needs changing, say so and finish.") } else { String::new() };
         let blocking = !failed.is_empty() || decision == "CHANGES_REQUESTED";
         let all_good = checks.iter().all(|c| CHECK_GOOD.contains(&checks::word(c).as_str()));
         // The board's own wait for GitHub's checks (land/checks.rs): none is still running, one failed, or it waited
@@ -127,7 +131,9 @@ fn poll_one(id: &str, pr: &str, j: &Value, via: &str) {
         if t.b("autoMerge") && t.b("checksWait") {
             // An empty list is not a pass: they have not started yet, or went from the list (checks::none_listed).
             let gone = checks::missing(t, &head, via, &checks);
-            if !failed.is_empty() || (!checks.is_empty() && all_good && gone.is_empty()) || ignored || checks::overdue(t) { t.put("autoMerge", false); t.put("autoMergeLocal", false); t.put("msg", "Merging"); then = Then::Land; }
+            // On Gitea, none reported a while after the wait began: none are coming (forge/gitea_checks.rs).
+            let none_coming = tea && checks.is_empty() && gone.is_empty() && crate::forge::gitea_checks::grace_over(t, &head);
+            if !failed.is_empty() || (!checks.is_empty() && all_good && gone.is_empty()) || none_coming || ignored || checks::overdue(t) { t.put("autoMerge", false); t.put("autoMergeLocal", false); t.put("msg", "Merging"); then = Then::Land; }
             else if !checks.is_empty() && t.at("checksWait").s("head") == head {
                 // Still running: which ones is kept, so that one gone from the list later is still waited for.
                 let names = checks::unique(checks.iter().filter(|c| !CHECK_GOOD.contains(&checks::word(c).as_str())).map(checks::name).chain(gone));
@@ -135,7 +141,7 @@ fn poll_one(id: &str, pr: &str, j: &Value, via: &str) {
                 let was = if t.at("checksWait").s("via") == via { strings(t.at("checksWait").at("seen")) } else { vec![] };
                 let seen = checks::unique(was.into_iter().chain(checks.iter().map(checks::name)));
                 t.obj_mut("checksWait").put("names", json!(names)); t.obj_mut("checksWait").put("seen", json!(seen)); t.obj_mut("checksWait").put("via", via);
-                let msg = checks::waiting_words(&checks, &names, &strings(t.at("checksWait").at("flows"))); // the workflows not through, by name
+                let msg = checks::waiting_words_on(fw.name, &checks, &names, &strings(t.at("checksWait").at("flows"))); // the workflows not through, by name
                 t.put("msg", msg);
             }
             return Ok(Change::Write);
