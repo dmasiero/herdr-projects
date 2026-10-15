@@ -37,11 +37,12 @@ pub fn explain(s: &Start, said: &str, screen: &str) -> Why {
     if all.contains("too long to hand to herdr") { return why("its message was too long to hand over".into(), format!("Shorten it, then {again}.")); }
     if said.contains("herdr program was not found") { return why("herdr was not found".into(), format!("Install herdr so that `herdr` runs here, then {again}.")); }
     if (!s.kind.is_empty() && !installed(s.kind)) || MISSING.is_match(screen) {
-        return why(format!("{k} is not installed here"), format!("Install {k} so that `{k}` runs in a terminal here, or choose another program ({}), then {again}.", s.setting));
+        return why(format!("{k} is not installed here"), format!("Install {k} so that `{}` runs in a terminal here, or choose another program ({}), then {again}.", super::kinds::program(k), s.setting));
     }
+    if said.contains("needs herdr's own integration") { return why(format!("{k} needs herdr's own integration"), format!("Run `herdr integration install {}`, then {again}.", super::kinds::kind(k).map(|a| a.integration).unwrap_or(k))); }
     if cut_off(screen) { return why("its start command was cut off: the terminal's shell was still starting".into(), format!("The board cleared the half-typed command: {again}.")); }
     if LOGIN.is_match(&all) || is_auth_failure(&all) { return Why { short: format!("{k} is not logged in"), next: format!("Run `{k}` in a terminal here and log in, then {again}."), auth: true }; }
-    if MODEL.is_match(&all) { return why(format!("{k} does not know the model it was given"), format!("Choose a model it has in {} (written as {k}/<model>), or leave the model out, then {again}.", s.setting)); }
+    if MODEL.is_match(&all) { return why(format!("{k} does not know the model it was given"), format!("Choose a model it has in {} (written as {k}/<model>; `herdr-projects models {k}` lists them), or leave the model out, then {again}.", s.setting)); }
     if ARG.is_match(&all) {
         let v = version_of(s.kind);
         return why(format!("{k}{} does not take one of the board's start arguments", if v.is_empty() { String::new() } else { format!(" {v}") }), format!("Update {k} to its latest version, then {again}."));

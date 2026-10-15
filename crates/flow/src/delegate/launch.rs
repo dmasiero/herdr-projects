@@ -81,7 +81,7 @@ pub fn start_agent(id: &str, g: &mut Guard, prompt: &str, resume: Option<&str>) 
         hooked = false; start_with(false)?;
     }
     // herdr calls the program ready before it has drawn anything; text typed that early loses its enter (submit.rs).
-    if !prompt.is_empty() && !blocked { let launch = std::iter::once(kind.clone()).chain(args(hooked)?).collect::<Vec<_>>().join(" "); crate::submit::settle(&api, &pane, &launch); }
+    if !prompt.is_empty() && !blocked { let launch = std::iter::once(crate::agents::kinds::program(&kind).to_string()).chain(args(hooked)?).collect::<Vec<_>>().join(" "); crate::submit::settle(&api, &pane, &launch); }
     // The send time arms the pipeline: nothing older than this counts as the turn's end.
     let (session, version, plan_mode) = (resume.map(String::from).or(x.session.clone()), x.version.clone(), plan::plan_args(&t, &kind).is_some() || plan::sandbox::boxed(&t));
     let t = g.set(|t| {
@@ -112,10 +112,13 @@ pub fn agent_now(g: &mut Guard, t: Task) -> Res<Task> {
     if !k.is_empty() && k != t.s("agent") { return g.set(|t| { t.put("agent", k.clone()); t.put("app", k.clone()); t.put("session", Value::Null); t.put("transcript", Value::Null); }); }
     Ok(t)
 }
-/// It resumes the conversation whose id the board chose (or learned) at launch, when the program still has it.
+/// It resumes the conversation whose id the board chose (or learned) at launch, when the program still has it. A
+/// program whose files the board does not read is taken at its word: the id herdr's integration reported, or the one
+/// the board gave it, which it saved once it was prompted.
 pub fn resumable(t: &Task) -> bool {
     let k = t.s("agent");
     if !t.b("session") || adapter::resume_args(k, "x").is_empty() { return false; }
+    if !crate::agents::kinds::kind(k).map(|a| a.reads_turn).unwrap_or(false) { return t.b("sent") || t.b("said"); }
     adapter::transcript(k, t.s("session"), &cwd_of(t)).is_some()
 }
 /// The prompt for an agent that is started again on a task it worked on before: (resume, prompt).

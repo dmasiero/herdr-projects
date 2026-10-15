@@ -141,14 +141,31 @@ impl Herdr {
             Err(e) => Err(e),
         }
     }
+    /// A program herdr sees at work only through its own integration is never started without it (kinds.rs
+    /// `needs_integration`): herdr would never say its turn ended. Its status unknown (an older herdr): it is started.
+    pub fn integration_ready(&self, kind: &str) -> HRes<()> {
+        let Some(k) = crate::agents::kinds::kind(kind).filter(|k| k.needs_integration) else { return Ok(()) };
+        let status = run_raw(self.socket.as_deref(), &args(&["integration", "status"]), 15000, "").unwrap_or_default();
+        let line = status.lines().find(|l| l.trim_start().starts_with(&format!("{}:", k.integration)) || l.trim_start().starts_with(&format!("{} (", k.integration)));
+        if line.map(|l| l.contains("not installed")).unwrap_or(false) {
+            return Err(HerdrError { code: "integration_missing".into(), message: format!("{kind} needs herdr's own integration, or herdr cannot see when it works: run `herdr integration install {}`, then try again.", k.integration) });
+        }
+        Ok(())
+    }
     pub fn agent_start(&self, name: &str, kind: &str, pane: &str, extra: &[String], timeout_ms: u64) -> HRes<Value> {
+        self.integration_ready(kind)?;
         let mut a = args(&["agent", "start", name, "--kind", kind, "--pane", pane, "--timeout", &timeout_ms.to_string()]);
         if !extra.is_empty() { a.push("--".into()); a.extend(extra.iter().cloned()); }
         match self.call_t(a, timeout_ms + 15000) {
             Ok(r) => Ok(r.at("agent").clone()),
             // A program that quits as it starts (on an argument it does not know) leaves herdr waiting for it until the
             // timeout. What it printed says why.
-            Err(e) if e.code == "timeout" && self.agent_get(pane).ok().flatten().is_none() => Err(match self.quit_with(pane, kind) { Some(why) => HerdrError { code: e.code, message: format!("{kind} quit as it started: {why}") }, None => e }),
+            // One that runs on, unseen, is behind a launcher herdr cannot see through (kilo and qodercli from npm: a node
+            // script that starts the program as its child).
+            Err(e) if e.code == "timeout" && self.agent_get(pane).ok().flatten().is_none() => Err(match self.quit_with(pane, kind) {
+                Some(why) => HerdrError { code: e.code, message: format!("{kind} quit as it started: {why}") },
+                None => HerdrError { message: format!("{}: herdr did not see {kind} come up in its pane. If it runs there, it is behind a launcher that hides it from herdr (kilo and qodercli installed with npm are): install its standalone program (docs/agents.md).", e.message), code: e.code },
+            }),
             Err(e) => Err(e),
         }
     }
