@@ -32,7 +32,7 @@ impl Bench {
         let _ = std::fs::remove_file(self.saw());
         let o = std::process::Command::new(root().join("scripts/ld/ld")).args(args).env_clear()
             .env("HOME", self.base.join("home")).env("XDG_CACHE_HOME", self.base.join("cache"))
-            .env("PATH", format!("{}:/usr/bin:/bin", self.base.join("bin").display())).envs(env.iter().copied()).output().unwrap();
+            .env("PATH", sw::util::bare_path(&format!("{}:/usr/bin:/bin", self.base.join("bin").display()))).envs(env.iter().copied()).output().unwrap();
         assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
         std::fs::read_to_string(self.saw()).unwrap().lines().map(String::from).collect()
     }

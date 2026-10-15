@@ -127,9 +127,13 @@ fn real_programs_herdr_superworks_own_processes_are_stopped_and_no_other() {
     let data = w.base.join("moved/data");
     let old = w.base.join("old/herdr-superwork");
     std::fs::create_dir_all(old.parent().unwrap()).unwrap();
-    std::fs::copy("/bin/sleep", &old).unwrap();
-    let keeper = std::process::Command::new(&old).arg("30").spawn().unwrap();
-    let mut other = std::process::Command::new("/bin/sleep").arg("30").spawn().unwrap();
+    // The real sleep, wherever this system keeps it. A coreutils of one program for all (NixOS) picks the command by its
+    // own name, which the copy does not have: it is told which.
+    let sleep = std::fs::canonicalize(std::env::split_paths(&std::env::var_os("PATH").unwrap()).map(|d| d.join("sleep")).find(|p| p.exists()).expect("sleep on PATH")).unwrap();
+    std::fs::copy(&sleep, &old).unwrap();
+    let one = sleep.file_name().map(|n| n == "coreutils").unwrap_or(false);
+    let keeper = std::process::Command::new(&old).args(if one { vec!["--coreutils-prog=sleep", "30"] } else { vec!["30"] }).spawn().unwrap();
+    let mut other = std::process::Command::new(&sleep).args(if one { vec!["--coreutils-prog=sleep", "30"] } else { vec!["30"] }).spawn().unwrap();
     let mark = |c: &std::process::Child| { let pid = c.id() as i64; serde_json::json!({ "pid": pid, "start": sw::store::files::proc_start(pid) }).to_string() };
     put(&data.join("keeper.json"), &mark(&keeper));
     put(&data.join("serve.json"), &mark(&other)); // whatever runs under that number now is not herdr-superwork's

@@ -136,7 +136,7 @@ fn install_writes_the_launcher_for_this_program() {
     let launcher = b.join("sw/data/bin/herdr-projects");
     // The PATH is the whole test program's: it keeps /bin (sh and cat are only there on macOS) and is given back.
     let was = std::env::var("PATH").unwrap_or_default();
-    set("PATH", "/usr/bin:/bin");
+    set("PATH", &sw::util::bare_path("/usr/bin:/bin"));
     let said = install(&exe);
     let text = read(&launcher);
     assert!(text.starts_with("#!/bin/sh\n") && text.contains(&format!("exec '{}' \"$@\"", exe.display())), "{text}");
@@ -146,11 +146,11 @@ fn install_writes_the_launcher_for_this_program() {
     assert!(said.contains(&format!("export PATH=\"{}:$PATH\"", launcher.parent().unwrap().display())), "{said}");
     // Another herdr-projects comes first on the PATH (npm link's): said, with the way out.
     exec(&b.join("npm/bin/herdr-projects"), "#!/bin/sh\n");
-    set("PATH", &format!("{}:{}:/usr/bin:/bin", b.join("npm/bin").display(), launcher.parent().unwrap().display()));
+    set("PATH", &sw::util::bare_path(&format!("{}:{}:/usr/bin:/bin", b.join("npm/bin").display(), launcher.parent().unwrap().display())));
     let said = install(&exe);
     assert!(said.contains(&format!("{} comes first on your PATH", b.join("npm/bin/herdr-projects").display())), "{said}");
     // The launcher's folder is on the PATH first: nothing more to say.
-    set("PATH", &format!("{}:/usr/bin:/bin", launcher.parent().unwrap().display()));
+    set("PATH", &sw::util::bare_path(&format!("{}:/usr/bin:/bin", launcher.parent().unwrap().display())));
     let lines = install(&exe).lines().count();
     set("PATH", &was);
     assert_eq!(lines, 1);
@@ -171,7 +171,7 @@ fn publish(b: &Path, version: &str, says: &str) {
     write(&PathBuf::from(format!("{}.sha256", f.display())), &format!("{}  {}\n", sha256(&f).unwrap(), asset_name(here())));
 }
 fn run_sh(b: &Path, args: &[&str]) -> (i32, String, String) {
-    let o = std::process::Command::new("sh").arg(b.join("plugin/bin/run.sh")).args(args).env("HERDR_PROJECTS_RELEASES", format!("file://{}/rel", b.display())).env("PATH", "/usr/bin:/bin").output().unwrap();
+    let o = std::process::Command::new("sh").arg(b.join("plugin/bin/run.sh")).args(args).env("HERDR_PROJECTS_RELEASES", format!("file://{}/rel", b.display())).env("PATH", sw::util::bare_path("/usr/bin:/bin")).output().unwrap();
     (o.status.code().unwrap_or(-1), String::from_utf8_lossy(&o.stdout).into_owned(), String::from_utf8_lossy(&o.stderr).into_owned())
 }
 

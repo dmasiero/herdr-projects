@@ -20,12 +20,15 @@ ln_install() {
   if command -v curl >/dev/null 2>&1; then curl -fsSL -o "$tmp/a.tgz" "$url"; else wget -qO "$tmp/a.tgz" "$url"; fi || {
     rm -rf "$tmp"; echo "Could not download mold ($url): this machine links as Rust does by itself." >&2; return 0; }
   got=$( (sha256sum "$tmp/a.tgz" 2>/dev/null || shasum -a 256 "$tmp/a.tgz") | cut -d' ' -f1)
-  if [ "$got" = "$sum" ] && tar -xzf "$tmp/a.tgz" -C "$tmp" && "$tmp/$name/bin/mold" --version >/dev/null 2>&1 \
-    && mkdir -p "${ln_dir%/*}" && mv "$tmp/$name" "$ln_dir.$$"; then
+  if [ "$got" != "$sum" ]; then echo "mold did not install (sha256 $got, not $sum): this machine links as Rust does by itself." >&2
+  elif ! tar -xzf "$tmp/a.tgz" -C "$tmp" || ! "$tmp/$name/bin/mold" --version >/dev/null 2>&1; then
+    # NixOS runs no program built for other Linux systems: mold's own release is one.
+    echo "mold did not install: its release does not run on this machine (on NixOS no program built for other Linux systems does). It links as Rust does by itself." >&2
+  elif mkdir -p "${ln_dir%/*}" && mv "$tmp/$name" "$ln_dir.$$"; then
     # one rename: a link that starts while it installs finds all of mold or none of it
     mv -T "$ln_dir.$$" "$ln_dir" 2>/dev/null || rm -rf "$ln_dir.$$"
     [ -x "$ln_dir/bin/mold" ] && echo "Installed mold: $ln_dir/bin/mold"
-  else echo "mold did not install (sha256 $got): this machine links as Rust does by itself." >&2; fi
+  else echo "mold did not install (could not move it into $ln_dir): this machine links as Rust does by itself." >&2; fi
   rm -rf "$tmp"; return 0
 }
 [ "$1" = --install ] && { ln_install; exit 0; }
