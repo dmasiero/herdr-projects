@@ -1,7 +1,8 @@
-//! What a login shell has that herdr's server may not pass on to the board's processes: the user's PATH, and gh's
-//! login (`GH_TOKEN`, `GH_HOST`, …). herdr starts plugin commands, the keeper among them, with its server's
-//! environment; started at boot that one may have neither, and then every gh call of the keeper's jobs fails ("gh auth
-//! login"): a merge waiting for GitHub's checks would never be looked at again. Used by runner.rs (`user_env`).
+//! What a login shell has that herdr's server may not pass on to the board's processes: the user's PATH, the account's
+//! name (USER, which a login shell on NixOS makes its PATH from), and gh's login (`GH_TOKEN`, `GH_HOST`, …). herdr
+//! starts plugin commands, the keeper among them, with its server's environment; started at boot that one may have
+//! none of them, and then every gh call of the keeper's jobs fails ("gh auth login"): a merge waiting for GitHub's
+//! checks would never be looked at again. Used by runner.rs (`user_env`).
 use crate::clock::now;
 use crate::json::*;
 use crate::store::files::{data_dir, read_obj, write_json};
@@ -49,7 +50,11 @@ pub fn user_env() {
         if !p.is_empty() && seen.insert(p.to_string()) { all.push(p.to_string()); }
     }
     let login = shell.map(|out| gh_login(&out, env_set)).unwrap_or_default();
+    // A login `sh` on NixOS makes its PATH again from the account's name (`/etc/profiles/per-user/$USER/bin`, where the
+    // user's own programs are, cargo among them): a process started without USER would find none of them.
+    let account = unsafe { let pw = libc::getpwuid(libc::getuid()); if pw.is_null() { String::new() } else { std::ffi::CStr::from_ptr((*pw).pw_name).to_string_lossy().into_owned() } };
     unsafe {
+        if !account.is_empty() { for k in ["USER", "LOGNAME"] { if !env_set(k) { std::env::set_var(k, &account); } } }
         std::env::set_var("PATH", all.join(":"));
         for (k, v) in login { std::env::set_var(k, v); }
         std::env::set_var("HERDR_PROJECTS_ENV_OK", "1");

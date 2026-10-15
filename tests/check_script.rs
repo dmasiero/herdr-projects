@@ -37,7 +37,7 @@ impl Bench {
     /// stand-in cargo was given (empty when the check never got to it).
     fn run(&self) -> (i32, String, String) {
         let o = std::process::Command::new("/bin/sh").args(["scripts/check.sh", "--all"]).current_dir(self.base.join("proj")).env_clear()
-            .env("HOME", self.home()).env("PATH", format!("{}:/usr/bin:/bin", self.base.join("bin").display())).output().unwrap();
+            .env("HOME", self.home()).env("PATH", sw::util::bare_path(&format!("{}:/usr/bin:/bin", self.base.join("bin").display()))).output().unwrap();
         let saw = std::fs::read_to_string(self.base.join("cargo-saw")).unwrap_or_default();
         (o.status.code().unwrap_or(-1), String::from_utf8_lossy(&o.stderr).into_owned(), saw.trim().to_string())
     }
@@ -80,7 +80,7 @@ fn real_programs_a_check_that_stops_before_it_starts_says_why_once() {
     let b = Bench::new("refused");
     let (code, err, saw) = {
         let o = std::process::Command::new("/bin/sh").args(["scripts/check.sh", "--nope"]).current_dir(b.base.join("proj")).env_clear()
-            .env("HOME", b.home()).env("PATH", "/usr/bin:/bin").output().unwrap();
+            .env("HOME", b.home()).env("PATH", sw::util::bare_path("/usr/bin:/bin")).output().unwrap();
         (o.status.code().unwrap_or(-1), String::from_utf8_lossy(&o.stderr).into_owned(), std::fs::read_to_string(b.base.join("cargo-saw")).unwrap_or_default())
     };
     assert_eq!((code, err.as_str(), saw.as_str()), (2, "check does not know --nope. It takes: --all, --fresh, --since <commit>, and names of tests.\n", ""));

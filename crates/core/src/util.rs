@@ -78,6 +78,14 @@ pub fn unbase64(s: &str) -> Option<Vec<u8>> {
 /// A regular expression made once, where it is written: `re!(r"\d+")`.
 #[macro_export]
 macro_rules! re { ($s:expr) => {{ static R: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new(); R.get_or_init(|| regex::Regex::new($s).unwrap()) }} }
+/// A short PATH, as a bare environment has one (`/usr/bin:/bin`), with the folders where this system keeps its everyday
+/// programs when they are not there: NixOS has next to nothing in /usr/bin and /bin, and keeps them in
+/// /run/current-system/sw/bin (its setuid wrappers in /run/wrappers/bin), which its own sshd puts on the PATH too.
+pub fn bare_path(short: &str) -> String {
+    let mut out: Vec<&str> = short.split(':').filter(|p| !p.is_empty()).collect();
+    for d in ["/run/wrappers/bin", "/run/current-system/sw/bin"] { if !out.contains(&d) && std::path::Path::new(d).is_dir() { out.push(d); } }
+    out.join(":")
+}
 /// An environment variable that says something: set, and not empty (as JavaScript's `process.env.X` reads true).
 pub fn env_set(k: &str) -> bool { std::env::var(k).map(|v| !v.is_empty()).unwrap_or(false) }
 /// Its value when it says something.

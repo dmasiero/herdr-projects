@@ -14,7 +14,7 @@ fn run_bare(line: &str, ms: u64) -> Ended {
     let user = std::env::var("USER").unwrap_or_default();
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
     let mut c = std::process::Command::new(&shell);
-    c.args(["-lc", line]).env_clear().env("HOME", crate::store::files::user_home()).env("USER", &user).env("LOGNAME", &user).env("SHELL", &shell).env("PATH", "/usr/local/bin:/usr/bin:/bin");
+    c.args(["-lc", line]).env_clear().env("HOME", crate::store::files::user_home()).env("USER", &user).env("LOGNAME", &user).env("SHELL", &shell).env("PATH", crate::util::bare_path("/usr/local/bin:/usr/bin:/bin"));
     super::run_ended(c, ms)
 }
 /// This machine, as another one would find it.
