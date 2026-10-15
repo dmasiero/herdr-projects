@@ -33,6 +33,8 @@ pub fn choose(t: &Obj, ch: &Obj, full: &str, tree: &str, root: &Path) -> Chosen 
 /// (`merge.checks`), with a workflow of the branch that runs for it. Then the full suite still runs before the merge.
 fn guarded(t: &Obj, ch: &Obj, root: &Path) -> bool {
     if ch.s("merge.checks") != "github" || !t.b("pr") || !ch.b("merge.pr") { return false; }
+    // On Gitea, Actions run a workflow of the branch's (forge/gitea_checks.rs).
+    if crate::forge::gitea_repo(root).is_some() { return crate::forge::gitea_checks::has_workflows(Path::new(t.s("worktree"))); }
     !crate::land::expected::flows_for(t, &crate::sync::main_branch(root, t)).is_empty()
 }
 /// Kept on the task when the full check passed: the commit it passed on (with what the check wrote committed) and

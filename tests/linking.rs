@@ -1,5 +1,5 @@
 //! [real programs] The linker of the builds (`scripts/linker.sh`, which the C compiler runs as `scripts/ld/ld`): mold
-//! when it is installed; the linker Rust uses by itself when it is not, for a release build and when turned off.
+//! when it is installed (the pinned one, else one on the PATH); the linker Rust uses by itself when it is not, for a release build and when turned off.
 use std::path::{Path, PathBuf};
 
 /// A home with a cache folder, and a `rust-lld`, an `ld` and (once installed) a mold that write down their name and
@@ -32,7 +32,7 @@ impl Bench {
         let _ = std::fs::remove_file(self.saw());
         let o = std::process::Command::new(root().join("scripts/ld/ld")).args(args).env_clear()
             .env("HOME", self.base.join("home")).env("XDG_CACHE_HOME", self.base.join("cache"))
-            .env("PATH", format!("{}:/usr/bin:/bin", self.base.join("bin").display())).envs(env.iter().copied()).output().unwrap();
+            .env("PATH", sw::util::bare_path(&format!("{}:/usr/bin:/bin", self.base.join("bin").display()))).envs(env.iter().copied()).output().unwrap();
         assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
         std::fs::read_to_string(self.saw()).unwrap().lines().map(String::from).collect()
     }
@@ -60,6 +60,17 @@ fn real_programs_with_mold_installed_a_build_links_with_it() {
     let b = Bench::new("mold");
     b.install_mold();
     assert_eq!(b.link(LINK, &[]), ran(&["mold"], LINK));
+}
+
+#[test]
+fn real_programs_a_mold_on_the_path_is_used_where_the_pinned_one_is_not_installed() {
+    let b = Bench::new("path");
+    b.linker(&b.base.join("bin/mold"), "path-mold");
+    assert_eq!(b.link(LINK, &[]), ran(&["path-mold"], LINK));
+    b.install_mold();
+    assert_eq!(b.link(LINK, &[]), ran(&["mold"], LINK), "the pinned one, installed, comes first");
+    let release = ["main.o", "-o", "/w/target/x86_64-unknown-linux-gnu/release/deps/herdr_projects-1"];
+    assert_eq!(b.link(&release, &[]), as_rust(&release));
 }
 
 #[test]

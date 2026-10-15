@@ -6,6 +6,7 @@ pub mod board_rule;
 pub mod check_progress;
 pub mod clock;
 pub mod err;
+pub mod forge;
 pub mod gate;
 pub mod herdr;
 pub mod http;

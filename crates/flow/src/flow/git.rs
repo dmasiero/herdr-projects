@@ -1,6 +1,8 @@
-//! Git and GitHub helpers used by more than one step: the pull request, its checks, a task's change.
+//! Git and GitHub helpers used by more than one step: the pull request, its checks, a task's change. A repo on Gitea
+//! has its gh commands answered through tea (forge.rs).
 use crate::clock::now;
 use crate::err::Res;
+use crate::forge::Forge;
 use crate::json::*;
 use crate::store::files::{data_dir, read_obj, read_text, write_json};
 use crate::store::repos::{folder_of, git_out};
@@ -22,17 +24,29 @@ pub fn has_origin(root: &Path) -> bool {
 pub struct GhOut { pub status: i32, pub stdout: String, pub stderr: String }
 thread_local! { static FAKE_GH: std::cell::RefCell<Option<std::rc::Rc<dyn Fn(&[String]) -> GhOut>>> = const { std::cell::RefCell::new(None) }; }
 pub fn set_fake_gh(f: Option<std::rc::Rc<dyn Fn(&[String]) -> GhOut>>) { FAKE_GH.with(|x| *x.borrow_mut() = f); }
+/// A gh command for the repo of `cwd`. A repo on Gitea (forge.rs) has it answered through tea, in gh's output.
 pub fn gh(args: &[&str], cwd: &Path, timeout_ms: u64) -> GhOut {
     let a: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-    if let Some(f) = FAKE_GH.with(|x| x.borrow().clone()) { return f(&a); }
+    match crate::forge::of(cwd) {
+        Forge::Gitea(repo) => { let r = crate::forge::gitea::as_gh(&a, &repo, cwd, timeout_ms); return GhOut { status: r.status, stdout: r.stdout, stderr: r.stderr }; }
+        Forge::Broken(why) => return GhOut { status: 1, stdout: String::new(), stderr: format!("{why}\n") },
+        Forge::GitHub => {}
+    }
+    let mut r = gh_itself(&a, cwd, timeout_ms);
+    // gh found no GitHub host in the remotes: the repo is elsewhere, and the board says how to reach it.
+    if r.status != 0 && r.stderr.contains("known GitHub host") { if let Some(h) = crate::forge::not_github_hint(cwd) { r.stderr = format!("{}\n{h}\n", r.stderr.trim_end()); } }
+    r
+}
+fn gh_itself(a: &[String], cwd: &Path, timeout_ms: u64) -> GhOut {
+    if let Some(f) = FAKE_GH.with(|x| x.borrow().clone()) { return f(a); }
     crate::runner::user_env();
-    let child = Command::new("gh").args(&a).current_dir(cwd).env("GH_PROMPT_DISABLED", "1").env("GIT_TERMINAL_PROMPT", "0").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn();
+    let child = Command::new("gh").args(a).current_dir(cwd).env("GH_PROMPT_DISABLED", "1").env("GIT_TERMINAL_PROMPT", "0").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn();
     match child.map_err(|e| e.to_string()).and_then(|c| crate::herdr::cli::wait_with_timeout(c, timeout_ms).map_err(|e| e.message)) {
         Ok(r) => GhOut { status: r.status, stdout: r.stdout, stderr: r.stderr },
         Err(e) => GhOut { status: -1, stdout: String::new(), stderr: e },
     }
 }
-pub fn pr_number(pr: &str) -> String { pr.split("/pull/").nth(1).map(|r| r.chars().take_while(|c| c.is_ascii_digit()).collect()).filter(|s: &String| !s.is_empty()).unwrap_or_else(|| pr.to_string()) }
+pub use crate::forge::pr_number;
 /// How GitHub words a check's result.
 pub const CHECK_BAD: [&str; 7] = ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE", "STALE"];
 pub const CHECK_GOOD: [&str; 3] = ["SUCCESS", "NEUTRAL", "SKIPPED"];
