@@ -15,7 +15,7 @@ herdr plugin install eliasstravik/herdr-projects
 - `git`, and `curl` or `wget` to download the program.
 - Optional: `gh` (pull requests) and `tailscale` (private review links).
 
-No Node, no npm: the board is one program.
+No Node, no npm: the board is one program. On NixOS, or to install it with Nix: [NixOS and Nix](nixos.md).
 
 ## What the install does
 
