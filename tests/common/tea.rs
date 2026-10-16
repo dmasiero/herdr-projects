@@ -54,6 +54,7 @@ impl FakeTea {
             }
             ("POST", ["repos", _, _, "pulls", n, "merge"]) => {
                 if c.b("mergeFail") { return out(405, json!({ "message": c.at("mergeFail") })); }
+                if pull(n).map(|p| p.b("merged")).unwrap_or(false) { return out(405, json!({ "message": "The PR is already merged" })); }
                 if pull(n).map(|p| sw::forge::gitea_view::is_wip(p.s("title"))).unwrap_or(false) { return out(405, json!({ "message": "work in progress" })); }
                 if c.b("head") && body.b("head_commit_id") && body.s("head_commit_id") != c.s("head") { return out(409, json!({ "message": "head out of date" })); }
                 for p in self.pulls.borrow_mut().iter_mut().filter(|p| p.at("number").to_string() == *n) { p["merged"] = json!(true); p["state"] = json!("closed"); p["merge_commit_sha"] = json!("abc123"); }

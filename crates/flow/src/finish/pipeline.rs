@@ -170,7 +170,7 @@ pub fn pipeline(id: &str, g: &mut Guard, text: &str, keep_intent: bool, reason: 
         already::nothing_to_land(&t, Path::new(&tree), already::made_commits(Path::new(&tree), &base, &before, &prev_main), ask)
     };
     t = g.set(|t| t.put("doneWhy", why.clone().map(Value::from).unwrap_or(Value::Null)))?;
-    if let Some(w) = &why { note = format!("{note} {w}."); }
+    if let Some(w) = &why { note = format!("{note} {w}."); super::follow_up::record_merged(g, &t, Path::new(&tree))?; }
     if !tree.is_empty() && ch.b("merge.pr") && !research && why.is_none() {
         let tp = Path::new(&tree);
         let base = [t.s("baseSha"), t.s("from")].into_iter().find(|s| !s.is_empty()).unwrap_or("HEAD").to_string();
@@ -184,6 +184,9 @@ pub fn pipeline(id: &str, g: &mut Guard, text: &str, keep_intent: bool, reason: 
             let ph = git_out(tp, &["rev-parse", &format!("refs/remotes/origin/{}", t.s("branch"))])?;
             g.set(|t| t.put("prHead", ph.clone()))?;
             let mut url = t.t("pr");
+            // That pull request merged already and the branch went on (a chat with the done task, OPS-3): pushing to it
+            // brings nothing in, so the work goes in a follow-up pull request (follow_up.rs).
+            if super::follow_up::merged(&t) { url = super::follow_up::open(g, &t, tp, text)?; }
             if url.is_empty() {
                 // It merges into the branch the task keeps up with: the one it started from at the remote.
                 let onto = t.s("from").starts_with("origin/").then(|| sync::main_branch(&root, &t));

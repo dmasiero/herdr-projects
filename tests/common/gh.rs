@@ -7,18 +7,21 @@ use sw::json::*;
 
 /// What gh answers, as the old test/fake-gh.js: `user`, `createFail`, `head`, `disableFail`, `autoOk`, `mergeFail`,
 /// `queue` (accepted, only lined up to merge later), `view` (what `pr view` gives), `late: { head, times }` (the first
-/// `times` looks at the pull request still name `head`, the commit before a push), `log` (what `run view --log-failed`
+/// `times` looks at the pull request's head still name `head`, the commit before a push), `log` (what `run view --log-failed`
 /// prints of a failed job), `base` and `baseFail` (the checks of the branch it merges into, asked through `api`), `required` (the checks it requires), `runs` (a commit's workflow runs), `others`
 /// (how many of the repo's last pull requests had checks). A fine-grained token: `noChecks` (GitHub refuses it the
 /// checks list, GraphQL's `statusCheckRollup` and the check-runs API, as it does a token with no Checks permission),
 /// `jobs` (each run's jobs), `statuses` (the commit's statuses), `actionsFail` (it may not read Actions either).
 /// `noLogin`: gh is not logged in where it runs (a keeper started without the login shell's GH_TOKEN): every call fails.
 /// `prs`: the pull requests GitHub has for a head branch (`pr list --head`), each { number, url, state }; none by
-/// default. `archived`: the repo is archived on GitHub (`repo view`).
+/// default. `archived`: the repo is archived on GitHub (`repo view`). `createUrl`: the link a new pull request gets
+/// (pull/7 by default). A pull request it merged says MERGED from then on, and refuses another merge as gh does.
 #[derive(Default)]
-pub struct FakeGh { pub cfg: RefCell<Value>, pub log: RefCell<Vec<String>>, pub merged: Cell<bool>, late: Cell<i64> }
+pub struct FakeGh { pub cfg: RefCell<Value>, pub log: RefCell<Vec<String>>, pub merged: RefCell<Vec<String>>, late: Cell<i64> }
 fn ok(out: &str) -> GhOut { GhOut { status: 0, stdout: if out.is_empty() { String::new() } else { format!("{out}\n") }, stderr: String::new() } }
 fn rows(v: &Value) -> String { v.as_array().map(|a| a.iter().map(|r| strings(r).join("\t")).collect::<Vec<_>>().join("\n")).unwrap_or_default() }
+/// The pull request's number in `pr <verb> <n>`.
+fn y_n(a: &[String]) -> String { a.get(2).cloned().unwrap_or_default() }
 fn fail(m: &str) -> GhOut { GhOut { status: 1, stdout: String::new(), stderr: format!("{m}\n") } }
 impl FakeGh {
     pub fn run(&self, a: &[String]) -> GhOut {
@@ -35,7 +38,7 @@ impl FakeGh {
         }
         match (x, y) {
             ("api", "user") => ok(if c.b("user") { c.s("user") } else { "me" }),
-            ("pr", "create") => if c.b("createFail") { fail(c.s("createFail")) } else { ok("https://github.com/o/r/pull/7") },
+            ("pr", "create") => if c.b("createFail") { fail(c.s("createFail")) } else { ok(if c.b("createUrl") { c.s("createUrl") } else { "https://github.com/o/r/pull/7" }) },
             ("pr", "ready") | ("pr", "comment") => ok(""),
             ("pr", "merge") => {
                 let only = a.iter().position(|s| s == "--match-head-commit").and_then(|i| a.get(i + 1)).cloned().unwrap_or_default();
@@ -43,13 +46,14 @@ impl FakeGh {
                 if has("--disable-auto") { return if c.b("disableFail") { fail("could not disable auto-merge") } else { ok("") }; }
                 if has("--auto") { return if c.b("autoOk") { ok("") } else { fail("auto-merge is not allowed") }; }
                 if c.b("mergeFail") { return fail(c.s("mergeFail")); }
-                if !c.b("queue") { self.merged.set(true); }
+                if self.merged.borrow().contains(&y_n(&a)) { return fail(&format!("X Pull request o/r#{} (x) was already merged", y_n(&a))); }
+                if !c.b("queue") { self.merged.borrow_mut().push(y_n(&a)); }
                 ok("")
             }
             ("pr", "view") => {
-                if c.at("late").is_object() { let n = self.late.get(); self.late.set(n + 1); if n < c.at("late").i("times") { return ok(&json!({ "state": "OPEN", "headRefOid": c.at("late").at("head") }).to_string()); } }
+                if c.at("late").is_object() && a.iter().any(|s| s.contains("headRefOid")) { let n = self.late.get(); self.late.set(n + 1); if n < c.at("late").i("times") { return ok(&json!({ "state": "OPEN", "headRefOid": c.at("late").at("head") }).to_string()); } }
                 let mut v = if c.at("view").is_object() { c.at("view").clone() } else { json!({ "state": "OPEN", "statusCheckRollup": [], "comments": [], "reviews": [], "author": { "login": "me" } }) };
-                if self.merged.get() { v["state"] = json!("MERGED"); }
+                if self.merged.borrow().contains(&y_n(&a)) { v["state"] = json!("MERGED"); }
                 if !rollup { if let Some(o) = v.as_object_mut() { o.remove("statusCheckRollup"); } }
                 ok(&v.to_string())
             }

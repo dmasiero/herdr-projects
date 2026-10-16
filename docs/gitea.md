@@ -45,3 +45,6 @@ Set it for one repo: `herdr-projects set merge.forge gitea --repo dotfiles`.
   GitHub; tea cannot change a pull request's base, so the board asks you to change it on the pull request's Gitea page
   (Edit, target branch) instead of with `gh pr edit`.
 - Gitea has no merge queue, and the board never sets Gitea's own auto-merge: it merges by itself once the checks pass.
+- **A pull request merged already** answers `HTTP 405: The PR is already merged` when merged again. The board reads that
+  as merged: the task is done, or its newer work goes in a follow-up pull request ([a pull request merged
+  already](follow-up.md)).

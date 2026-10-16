@@ -45,7 +45,7 @@ pub(super) fn fail(g: &mut Guard, title: &str, detail: &str, next: &str, f: Fail
 pub(super) fn no_fix() -> Fail { Fail { agent_can_fix: false, auth: Some(false), keep_intent: false } }
 /// `head`: the commit that was merged. Nothing newer on the branch is taken for merged. `commit`: the commit it made on
 /// the branch it landed on, what a task that waited for it is told (after/handed.rs).
-fn landed(id: &str, g: &mut Guard, t: &Task, msg: &str, head: &str, commit: &str) -> Res<()> {
+pub(super) fn landed(id: &str, g: &mut Guard, t: &Task, msg: &str, head: &str, commit: &str) -> Res<()> {
     let mark = flow::spaces::tidy_mark(t, "always", head);
     let d = g.set(|t| {
         if !commit.is_empty() { t.put("mergeCommit", commit); }
@@ -74,8 +74,11 @@ fn onto_named(id: &str, g: &mut Guard, t: &Task, root: &Path, tree: &str, b: &st
         return Ok(false);
     }
     if !t.b("pr") { return Ok(true); }
-    let r = gh(&["pr", "view", &pr_number(t.s("pr")), "--json", "baseRefName"], root, 60000);
-    let base = if r.status == 0 { serde_json::from_str::<Value>(&r.stdout).map(|v| v.t("baseRefName")).unwrap_or_default() } else { String::new() };
+    let r = gh(&["pr", "view", &pr_number(t.s("pr")), "--json", "baseRefName,state"], root, 60000);
+    let seen = if r.status == 0 { serde_json::from_str::<Value>(&r.stdout).unwrap_or(Value::Null) } else { Value::Null };
+    // Merged already, into whichever branch: nothing is merged here, the branch is compared with it (merged.rs).
+    if seen.s("state") == "MERGED" { return Ok(true); }
+    let base = seen.t("baseRefName");
     // Not known is not "into b": nothing merges until GitHub says which branch it merges into.
     if base.is_empty() {
         let said = [r.stderr.trim(), r.stdout.trim()].into_iter().find(|s| !s.is_empty()).unwrap_or("no branch named").to_string();
@@ -130,6 +133,8 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
             Err(e) if is_aborted(&e) => return Err(e),
             Err(e) => return fail(g, "Could not read the task's worktree", &format!("Worktree: {tree}\n\nWhat git said:\n{}", e.msg), "Check that the worktree is still there and on the task's own branch, then approve again.", Fail::default()),
         }
+        // Merged already: main brought in now would hide that merge (a squash leaves the branch with nothing to land).
+        if t.b("pr") && super::merged::handled(id, g, &t, &root, None)? { return Ok(()); }
         // The last safety net: the branch was brought up to date before its review and whenever main moved since.
         let r = sync::sync_main(&t, &tree);
         match r.status {
@@ -151,6 +156,8 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
         // By number, not link: gh then uses the repo's own remote for the host.
         let pr = pr_number(t.s("pr"));
         let fw = crate::forge::words_of_pr(t.s("pr"));
+        // Merged already, with no worktree to bring main into first (merged.rs; with one, it was asked before the sync).
+        if tree.is_empty() && super::merged::handled(id, g, &t, &root, None)? { return Ok(()); }
         // Only the commit that was checked and reviewed here may merge.
         let reviewed = t.at("mergeIntent").t("verifiedHead");
         if !reviewed.is_empty() {
@@ -181,6 +188,8 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
             let waiting = !states.iter().any(|s| CHECK_BAD.contains(&s.as_str())) && v.s("reviewDecision") != "CHANGES_REQUESTED" && (states.iter().any(|s| !CHECK_GOOD.contains(&s.as_str())) || v.s("reviewDecision") == "REVIEW_REQUIRED");
             if waiting { g.set(|t| { t.put("failure", Value::Null); t.put("autoMerge", true); t.put("autoMergeLocal", true); let m = format!("Approved: merges when {}'s checks pass ({})", fw.name, t.s("pr")); t.put("msg", m); })?; return Ok(()); }
             let out = [m.stdout.trim(), m.stderr.trim()].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join("\n");
+            // Gitea's 405 "already merged", gh's "was already merged": no unknown error, it merged meanwhile.
+            if super::merged::handled(id, g, &t, &root, Some(&out))? { return Ok(()); }
             return fail(g, "Pull request could not merge", &format!("Pull request: {}\nBranch: {}\n\n{} pr merge:\n{out}\n\nNo check is still running and no review is awaited, so there is nothing to wait for.", t.s("pr"), if t.b("branch") { t.s("branch") } else { "unknown" }, fw.cli), "Inspect the pull request's base branch, conflicts and checks. Resolve branch conflicts in your own worktree, or fix failed checks, then finish again. Approval is required before retrying the merge.", Fail::default());
         }
         // Bring your checkout along when that is safe.
