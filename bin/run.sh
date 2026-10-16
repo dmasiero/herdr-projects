@@ -14,7 +14,10 @@
 # HERDR_PROJECTS_RELEASES names another place for the releases (a fork, a mirror, a folder as file:///…).
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(dirname -- "$here")
-PATH="${PATH:+$PATH:}/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$HOME/.cargo/bin"; export PATH
+# Nix's folders come last (NixOS keeps git and curl in /run/current-system/sw/bin, a user's own programs in
+# /etc/profiles/per-user/$USER/bin): only a program found nowhere else is taken from them.
+PATH="${PATH:+$PATH:}/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$HOME/.cargo/bin:/run/current-system/sw/bin"
+PATH="$PATH:$HOME/.nix-profile/bin${USER:+:/etc/profiles/per-user/$USER/bin}"; export PATH
 say() { printf 'herdr-projects: %s\n' "$*" >&2; }
 fetch_only=""; [ "$1" = "--fetch" ] && { fetch_only=1; shift; }
 run() { [ -n "$fetch_only" ] && exit 0; exec "$@"; }
