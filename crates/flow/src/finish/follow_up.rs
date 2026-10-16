@@ -31,8 +31,9 @@ pub fn title_of(t: &Task) -> String { format!("{}{MARK}", if t.b("title") { t.t(
 pub fn open(g: &mut Guard, t: &Task, cwd: &Path, text: &str) -> Res<String> {
     let old = t.t("pr");
     let seen = view(cwd, &old).unwrap_or(Value::Null);
-    // Into the branch the merged one went into; not said, the one the task lands on (its named branch, else main).
-    let base = if seen.b("baseRefName") { seen.t("baseRefName") } else if t.s("from").starts_with("origin/") { crate::sync::main_branch(cwd, t) } else { String::new() };
+    // Into the branch the task lands on when it started from a named one (`workspace.from`), else into the branch the
+    // merged one went into; neither known, gh's own default.
+    let base = crate::sync::named_base(cwd, t).unwrap_or_else(|| seen.t("baseRefName"));
     let commit = seen.at("mergeCommit").t("oid");
     let at = if commit.is_empty() { String::new() } else { format!(" as {}", &commit[..commit.len().min(7)]) };
     let into = if base.is_empty() { String::new() } else { format!(" into {base}") };

@@ -74,8 +74,11 @@ fn onto_named(id: &str, g: &mut Guard, t: &Task, root: &Path, tree: &str, b: &st
         return Ok(false);
     }
     if !t.b("pr") { return Ok(true); }
-    let r = gh(&["pr", "view", &pr_number(t.s("pr")), "--json", "baseRefName"], root, 60000);
-    let base = if r.status == 0 { serde_json::from_str::<Value>(&r.stdout).map(|v| v.t("baseRefName")).unwrap_or_default() } else { String::new() };
+    let r = gh(&["pr", "view", &pr_number(t.s("pr")), "--json", "baseRefName,state"], root, 60000);
+    let seen = if r.status == 0 { serde_json::from_str::<Value>(&r.stdout).unwrap_or(Value::Null) } else { Value::Null };
+    // Merged already, into whichever branch: nothing is merged here, the branch is compared with it (merged.rs).
+    if seen.s("state") == "MERGED" { return Ok(true); }
+    let base = seen.t("baseRefName");
     // Not known is not "into b": nothing merges until GitHub says which branch it merges into.
     if base.is_empty() {
         let said = [r.stderr.trim(), r.stdout.trim()].into_iter().find(|s| !s.is_empty()).unwrap_or("no branch named").to_string();

@@ -15,7 +15,8 @@ Before it merges, the board asks GitHub or Gitea for the pull request's state. A
 merged" (Gitea's HTTP 405, gh's `was already merged`) counts as merged too, not as an unknown error. Then the board
 compares the task's branch with the branch it merged into, before it brings main in: does merging the branch there
 change anything? That holds for a squash merge and for a pull request into another branch than main, such as the
-branch a task started from (`workspace.from`): its follow-up goes into that branch too.
+branch a task started from (`workspace.from`). A pull request merged already is never refused for its base: it is
+compared with the branch it merged into. A task started from a named branch gets its follow-up into that branch.
 
 - **Nothing new on the branch.** The task is done with that merge. Its row says `Already merged: <the pull request>`,
   and the merge commit is kept as the task's.

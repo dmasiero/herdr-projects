@@ -4,7 +4,8 @@
 //! gh's "was already merged" are taken for merged. A chat with a task whose pull request the board merged (OPS-3) opens
 //! a follow-up too, instead of pushing to the merged one. A squash merge, or a merge into another base, with nothing
 //! new on the branch is done with that merge recorded, never followed up. A task started from a named branch
-//! (`workspace.from`) is compared with that branch, and its follow-up goes into it.
+//! (`workspace.from`) whose pull request merged, into that branch or another, is compared with the branch it merged
+//! into, not refused for its base, and its follow-up goes into the task's own branch.
 use crate::common;
 use common::tea::{gitea_world, tea_log};
 use common::*;
@@ -255,4 +256,40 @@ fn a_task_started_from_a_named_branch_gets_its_follow_up_into_that_branch() {
     let log = gh_log(&w);
     assert!(log.contains("--title Develop went on (follow-up)") && log.contains("Follow-up to https://github.com/o/r/pull/7.\n\nThat pull request was merged into develop"), "{log}");
     assert!(log.trim_end().lines().filter(|l| l.contains("--base develop")).count() >= 2, "{log}");
+}
+
+#[test]
+fn a_task_started_from_a_named_branch_whose_pull_request_was_merged_into_another_branch_with_nothing_new_is_done() {
+    let w = pr_world();
+    let id = from_develop(&w, "Into release");
+    let t = task(&id);
+    squashed_into(&w, &t, "release");
+    let mut v = merged_view(&head(&t));
+    v["baseRefName"] = json!("release");
+    w.gh_says(json!({ "view": v, "createUrl": "https://github.com/o/r/pull/8" }));
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "done", "not 'merges into release, not develop': {} {}", t.s("msg"), t.at("failure"));
+    assert!(t.s("msg").starts_with("Already merged: https://github.com/o/r/pull/7"), "{}", t.s("msg"));
+    assert!(t.b("prMerged"));
+    assert_eq!(t.s("pr"), "https://github.com/o/r/pull/7");
+}
+
+#[test]
+fn a_task_started_from_a_named_branch_whose_pull_request_was_merged_into_another_branch_gets_its_follow_up_into_its_own() {
+    let w = pr_world();
+    let id = from_develop(&w, "Release lacks it");
+    let t = task(&id);
+    let mut v = merged_view(&head(&t));
+    v["baseRefName"] = json!("release");
+    git(&w.root, &["push", "-q", "origin", "main:refs/heads/release"]);
+    w.gh_says(json!({ "view": v, "createUrl": "https://github.com/o/r/pull/8" }));
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "approval", "{}", t.at("failure"));
+    assert!(t.at("failure").is_null(), "{}", t.at("failure"));
+    assert_eq!(t.s("pr"), "https://github.com/o/r/pull/8");
+    let log = gh_log(&w);
+    let made = &log[log.find("--title Release lacks it (follow-up)").unwrap_or_else(|| panic!("{log}"))..];
+    assert!(made.lines().any(|l| l.ends_with("--base develop")), "{log}");
 }
