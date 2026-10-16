@@ -23,15 +23,14 @@ pub(super) fn handled(id: &str, g: &mut Guard, t: &Task, root: &Path, out: Optio
     let head = if !reviewed.is_empty() { reviewed } else if !tree.is_empty() { flow::git::head_of(&at) } else { t.t("prHead") };
     let base = if seen.b("baseRefName") { seen.t("baseRefName") } else { crate::sync::main_branch(root, t) };
     let _ = crate::sync::fetch_main(&at, &base);
-    let new = git_out(&at, &["diff", "--name-only", &format!("origin/{base}...{head}")]);
     let commit = seen.at("mergeCommit").t("oid");
-    match new {
-        Ok(files) if files.trim().is_empty() => {
+    match brings_nothing(&at, &format!("origin/{base}"), &head) {
+        Ok(true) => {
             // Everything on the branch is on the base: that merge was this task's.
             flow::git::drop_remote_branch(root, t.s("branch"), &head);
             landed(id, g, t, &format!("Already merged: {}", t.s("pr")), &head, &commit)?;
         }
-        Ok(_) => {
+        Ok(false) => {
             let summary = if t.b("summary") { t.t("summary") } else { t.t("title") };
             match follow_up::open(g, t, &at, &summary) {
                 Ok(url) => {
@@ -48,4 +47,11 @@ pub(super) fn handled(id: &str, g: &mut Guard, t: &Task, root: &Path, out: Optio
         Err(e) => { fail(g, "Could not compare the branch with its base", &format!("Pull request: {} (merged already)\nBranch: {}\nBase: {base}\n\n{}", t.s("pr"), t.s("branch"), e.msg), "Investigate the Git error, then approve again.", Default::default())?; }
     }
     Ok(true)
+}
+/// Whether merging `head` into `base` would leave `base` as it is: everything on the branch is there already, however
+/// it got there (a squash merge, a merge into another base, a rebase). A merge that conflicts brings something.
+pub fn brings_nothing(at: &Path, base: &str, head: &str) -> Res<bool> {
+    let tree = git_out(at, &["rev-parse", &format!("{base}^{{tree}}")])?;
+    let merged = match git_out(at, &["merge-tree", "--write-tree", base, head]) { Ok(m) => m, Err(_) => return Ok(false) };
+    Ok(merged.lines().next().unwrap_or("").trim() == tree)
 }

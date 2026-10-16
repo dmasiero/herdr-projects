@@ -2,7 +2,8 @@
 //! Gitea: nothing new on the branch, the task is done with that merge; newer work on it goes in a follow-up pull request
 //! from the same branch, which is checked and waits for approval as any other. Gitea's HTTP 405 "already merged" and
 //! gh's "was already merged" are taken for merged. A chat with a task whose pull request the board merged (OPS-3) opens
-//! a follow-up too, instead of pushing to the merged one.
+//! a follow-up too, instead of pushing to the merged one. A squash merge, or a merge into another base, with nothing
+//! new on the branch is done with that merge recorded, never followed up.
 use crate::common;
 use common::tea::{gitea_world, tea_log};
 use common::*;
@@ -137,4 +138,77 @@ fn on_gitea_a_405_already_merged_with_newer_work_on_the_branch_gets_a_follow_up_
     assert_eq!(t.s("stage"), "done", "{}", t.at("failure"));
     assert!(t.s("msg").starts_with("Merged: https://gitea.test/o/r/pulls/8"), "{}", t.s("msg"));
     assert!(tea_log(&w).contains("POST repos/o/r/pulls/8/merge"), "{}", tea_log(&w));
+}
+
+/// The branch squash-merged into `base` at the remote, as GitHub or Gitea does it: one new commit, not the branch's own.
+fn squashed_into(w: &World, t: &Obj, base: &str) -> String {
+    if base != "main" { git(&w.root, &["checkout", "-qb", base]); }
+    git(&w.root, &["merge", "-q", "--squash", t.s("branch")]);
+    git(&w.root, &["commit", "-qm", "Squashed (#7)"]);
+    let sha = git(&w.root, &["rev-parse", "HEAD"]);
+    git(&w.root, &["push", "-q", "origin", base]);
+    if base != "main" { git(&w.root, &["checkout", "-q", "main"]); }
+    sha
+}
+
+#[test]
+fn on_github_a_pull_request_squash_merged_elsewhere_with_nothing_new_is_done_with_that_merge_recorded() {
+    let w = pr_world();
+    let id = to_approval(&w, "Squashed elsewhere");
+    let t = task(&id);
+    squashed_into(&w, &t, "main");
+    w.gh_says(json!({ "view": merged_view(&head(&t)) }));
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "done", "{}", t.at("failure"));
+    assert!(t.s("msg").starts_with("Already merged: https://github.com/o/r/pull/7"), "{}", t.s("msg"));
+    assert_eq!(t.s("mergeCommit"), "m".repeat(40));
+    assert!(t.b("prMerged"));
+}
+
+#[test]
+fn a_pull_request_squash_merged_into_another_base_with_nothing_new_is_done_not_followed_up() {
+    let w = pr_world();
+    let id = to_approval(&w, "Release PR");
+    let t = task(&id);
+    squashed_into(&w, &t, "release");
+    let mut v = merged_view(&head(&t));
+    v["baseRefName"] = json!("release");
+    w.gh_says(json!({ "view": v, "createUrl": "https://github.com/o/r/pull/8" }));
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "done", "{} {}", t.s("msg"), t.at("failure"));
+    assert_eq!(t.s("pr"), "https://github.com/o/r/pull/7");
+    assert!(!gh_log(&w).contains("pr create --draft --head work/1-release-pr --title Release PR (follow-up)"), "{}", gh_log(&w));
+}
+
+#[test]
+fn on_gitea_a_pull_request_squash_merged_with_nothing_new_is_done_with_that_merge_recorded() {
+    let w = gitea_world(json!({ "review.when": "never" }));
+    let id = to_approval(&w, "Gitea squash");
+    let t = task(&id);
+    let sha = squashed_into(&w, &t, "main");
+    { let mut p = w.tea.pulls.borrow_mut(); p[0]["merged"] = json!(true); p[0]["state"] = json!("closed"); p[0]["merge_commit_sha"] = json!(sha); }
+    w.tea_says(json!({ "head": head(&t) }));
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "done", "{}", t.at("failure"));
+    assert_eq!(t.s("mergeCommit"), sha);
+    assert!(t.b("prMerged"));
+    assert!(!tea_log(&w).contains("pulls/7/merge"), "{}", tea_log(&w));
+}
+
+#[test]
+fn a_task_found_done_by_a_sync_with_its_pull_request_merged_elsewhere_records_that_merge() {
+    let w = pr_world();
+    let id = to_approval(&w, "Synced done");
+    let t = task(&id);
+    squashed_into(&w, &t, "main");
+    w.gh_says(json!({ "view": merged_view(&head(&t)) }));
+    // main moved while it waits for approval: the board brings it in by itself, and finds nothing left to land
+    sw::housekeeping::housekeeping(&w.socket, sw::housekeeping::Force::Yes);
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "done", "{} {}", t.s("msg"), t.at("failure"));
+    assert!(t.b("prMerged"));
+    assert_eq!(t.s("mergeCommit"), "m".repeat(40));
 }

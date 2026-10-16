@@ -164,7 +164,7 @@ pub fn pipeline(id: &str, g: &mut Guard, text: &str, keep_intent: bool, reason: 
         already::nothing_to_land(&t, Path::new(&tree), already::made_commits(Path::new(&tree), &base, &before, &prev_main), ask)
     };
     t = g.set(|t| t.put("doneWhy", why.clone().map(Value::from).unwrap_or(Value::Null)))?;
-    if let Some(w) = &why { note = format!("{note} {w}."); }
+    if let Some(w) = &why { note = format!("{note} {w}."); super::follow_up::record_merged(g, &t, Path::new(&tree))?; }
     if !tree.is_empty() && ch.b("merge.pr") && !research && why.is_none() {
         let tp = Path::new(&tree);
         let base = [t.s("baseSha"), t.s("from")].into_iter().find(|s| !s.is_empty()).unwrap_or("HEAD").to_string();

@@ -13,7 +13,8 @@ nothing into main. This is what happened on OPS-3: four files of work were left 
 
 Before it merges, the board asks GitHub or Gitea for the pull request's state. A refused merge that says "already
 merged" (Gitea's HTTP 405, gh's `was already merged`) counts as merged too, not as an unknown error. Then the board
-compares the task's branch with the branch it merged into:
+compares the task's branch with the branch it merged into, before it brings main in: does merging the branch there
+change anything? That holds for a squash merge and for a pull request into another branch than main.
 
 - **Nothing new on the branch.** The task is done with that merge. Its row says `Already merged: <the pull request>`,
   and the merge commit is kept as the task's.
@@ -23,7 +24,8 @@ compares the task's branch with the branch it merged into:
   review where it is set up, then approval under `merge.by`. The approval you gave was for the first pull request, so
   it does not carry over.
 
-The finish line does the same when the board already knows the pull request is merged: after a chat with a done task,
+A task found to have nothing left to land after main was brought in (main moved while it waited) records the merge of
+its pull request the same way. The finish line also opens a follow-up when the board already knows the pull request is merged: after a chat with a done task,
 the new work goes in a follow-up instead of being pushed to the merged pull request. The earlier pull requests are kept
 in the task's record (`prEarlier`).
 

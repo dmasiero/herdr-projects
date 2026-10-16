@@ -92,6 +92,8 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
             Err(e) if is_aborted(&e) => return Err(e),
             Err(e) => return fail(g, "Could not synchronize main", &e.msg, "Investigate the fetch/Git error, then retry after fixing it.", Fail::default()),
         }
+        // Merged already: main brought in now would hide that merge (a squash leaves the branch with nothing to land).
+        if t.b("pr") && super::merged::handled(id, g, &t, &root, None)? { return Ok(()); }
         // The last safety net: the branch was brought up to date before its review and whenever main moved since.
         let r = sync::sync_main(&t, &tree);
         match r.status {
@@ -113,8 +115,8 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
         // By number, not link: gh then uses the repo's own remote for the host.
         let pr = pr_number(t.s("pr"));
         let fw = crate::forge::words_of_pr(t.s("pr"));
-        // Merged already (outside the board, or before the branch went on): done, or a follow-up (merged.rs).
-        if super::merged::handled(id, g, &t, &root, None)? { return Ok(()); }
+        // Merged already, with no worktree to bring main into first (merged.rs; with one, it was asked before the sync).
+        if tree.is_empty() && super::merged::handled(id, g, &t, &root, None)? { return Ok(()); }
         // Only the commit that was checked and reviewed here may merge.
         let reviewed = t.at("mergeIntent").t("verifiedHead");
         if !reviewed.is_empty() {

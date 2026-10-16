@@ -52,3 +52,12 @@ pub fn open(g: &mut Guard, t: &Task, cwd: &Path, text: &str) -> Res<String> {
     })?;
     Ok(url)
 }
+/// A task done with nothing to land whose pull request its forge has as merged (merged elsewhere): that merge is the
+/// task's, recorded as the board's own merge would be.
+pub fn record_merged(g: &mut Guard, t: &Task, cwd: &Path) -> Res<()> {
+    if !t.b("pr") || t.b("prMerged") { return Ok(()); }
+    let Some(v) = view(cwd, t.s("pr")).filter(|v| v.s("state") == "MERGED") else { return Ok(()) };
+    let commit = v.at("mergeCommit").t("oid");
+    g.set(|t| { t.put("prMerged", true); t.put("prState", "merged"); if !commit.is_empty() { t.put("mergeCommit", commit.clone()); } if !t.b("mergedAt") { t.put("mergedAt", crate::clock::now()); } })?;
+    Ok(())
+}
