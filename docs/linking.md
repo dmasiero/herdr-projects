@@ -22,6 +22,9 @@ library. mold halves the link time, about 0.4 s saved per build.
 - **The script.** `scripts/linker.sh` runs mold: one pinned version, checked against its published sha256, kept in
   `~/.cache/herdr-projects` beside the shared build cache. The workspace setup installs it
   (`sh scripts/linker.sh --install`, in `scripts/setup.sh`).
+- **NixOS** runs no program built for other Linux systems, so the pinned mold cannot be installed there. Where the
+  pinned one is not installed, the script uses a mold on the PATH (on NixOS, the `mold` package). The pinned one comes
+  first wherever it is installed.
 - **mold uses all the cores**, like Rust's lld. A link takes a fraction of a second. On this task's share of the cores
   ([testing](testing.md)), mold kept little of its gain.
 - **Where mold is not installed** (GitHub CI, a fresh machine, no network, a platform with no mold build), the script

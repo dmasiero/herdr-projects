@@ -1,6 +1,6 @@
 //! [real programs] The check's own script (`scripts/check.sh`) as a fresh machine starts it: an empty home, with no
 //! settings and no build cache, gets past its start on the default share of the cores, and a check that stops says
-//! why on stderr, never with no word.
+//! why on stderr, never with no word; with no cargo it says how to get Rust.
 use std::path::{Path, PathBuf};
 
 /// A copy of the check's scripts in a git repo of its own, an empty home, and a `cargo` that writes down what it was
@@ -14,7 +14,7 @@ impl Bench {
         std::fs::create_dir_all(proj.join("scripts")).unwrap();
         std::fs::create_dir_all(base.join("home")).unwrap();
         std::fs::create_dir_all(base.join("bin")).unwrap();
-        for f in ["check.sh", "run-tests.sh", "build-cache.sh", "share-cores.sh"] {
+        for f in ["cargo.sh", "check.sh", "run-tests.sh", "build-cache.sh", "share-cores.sh"] {
             std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts").join(f), proj.join("scripts").join(f)).unwrap();
         }
         let stub = |name: &str, body: &str| {
@@ -84,4 +84,18 @@ fn real_programs_a_check_that_stops_before_it_starts_says_why_once() {
         (o.status.code().unwrap_or(-1), String::from_utf8_lossy(&o.stderr).into_owned(), std::fs::read_to_string(b.base.join("cargo-saw")).unwrap_or_default())
     };
     assert_eq!((code, err.as_str(), saw.as_str()), (2, "check does not know --nope. It takes: --all, --fresh, --since <commit>, and names of tests.\n", ""));
+}
+
+#[test]
+fn real_programs_a_check_with_no_cargo_says_how_to_get_rust() {
+    let b = Bench::new("no-cargo");
+    // A PATH with only what the check runs before it looks for cargo: no cargo of the machine's own is found.
+    let tools = b.base.join("tools");
+    std::fs::create_dir_all(&tools).unwrap();
+    let dirname = std::env::split_paths(&std::env::var_os("PATH").unwrap()).map(|d| d.join("dirname")).find(|p| p.exists()).expect("dirname on PATH");
+    std::os::unix::fs::symlink(dirname, tools.join("dirname")).unwrap();
+    let o = std::process::Command::new("/bin/sh").args(["scripts/check.sh", "--all"]).current_dir(b.base.join("proj")).env_clear()
+        .env("HOME", b.home()).env("PATH", &tools).output().unwrap();
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert_eq!((o.status.code(), err.as_ref()), (Some(2), "The check needs Rust (cargo), which is not on the PATH: install it with https://rustup.rs, or on NixOS start a shell that has it: nix develop (docs/nixos.md).\n"));
 }

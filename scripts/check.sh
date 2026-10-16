@@ -33,10 +33,8 @@ while [ $# -gt 0 ]; do
 done
 [ "$again" = 0 ] || [ -z "$names" ] || quit "check takes names of tests or --since, not both."
 say() { [ -n "$HERDR_PROJECTS_PROGRESS" ] && printf '%s\n' "$1" > "$HERDR_PROJECTS_PROGRESS" || true; }
-if ! command -v cargo >/dev/null 2>&1; then
-  for d in "$HOME/.cargo/bin"; do [ ! -x "$d/cargo" ] || PATH="$d:$PATH"; done
-fi
-command -v cargo >/dev/null 2>&1 || quit "The check needs Rust (cargo): https://rustup.rs"
+. scripts/cargo.sh
+cargo_found || quit "The check needs Rust (cargo), which is not on the PATH: $cargo_hint."
 # Compiles through the build cache every worktree shares, when the workspace setup installed it, on this task's share
 # of the cores (docs/testing.md).
 . scripts/build-cache.sh
