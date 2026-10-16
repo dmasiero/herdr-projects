@@ -7,6 +7,7 @@ pub mod checks;
 pub mod cleanup;
 pub mod expected;
 pub mod merge;
+pub mod merged;
 pub mod readable;
 pub mod triggers;
 pub use cleanup::{cleanup, cleanup_job, cleanup_with, tidy, Cleanup};

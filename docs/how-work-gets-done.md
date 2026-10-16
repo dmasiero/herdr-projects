@@ -115,6 +115,8 @@ it merges:
 
 A conflict found here goes back to the agent the same way, and the merge you approved is retried after its repair. A
 checkout with unsaved files is never forced. Merging without your yes: [merging by itself](gate.md#merging-by-itself).
+A pull request that turns out to be merged already is not an error: the task is done, or its newer work goes in a
+follow-up pull request ([a pull request merged already](follow-up.md)).
 
 ### GitHub's checks must pass first
 

@@ -178,6 +178,9 @@ pub fn pipeline(id: &str, g: &mut Guard, text: &str, keep_intent: bool, reason: 
             let ph = git_out(tp, &["rev-parse", &format!("refs/remotes/origin/{}", t.s("branch"))])?;
             g.set(|t| t.put("prHead", ph.clone()))?;
             let mut url = t.t("pr");
+            // That pull request merged already and the branch went on (a chat with the done task, OPS-3): pushing to it
+            // brings nothing in, so the work goes in a follow-up pull request (follow_up.rs).
+            if super::follow_up::merged(&t) { url = super::follow_up::open(g, &t, tp, text)?; }
             if url.is_empty() {
                 let body = format!("{}\n\nTask: {}", if text.is_empty() { t.t("title") } else { text.to_string() }, task_ref(id, &repo_keys()));
                 let r = flow::git::gh(&["pr", "create", "--draft", "--head", t.s("branch"), "--title", if t.b("title") { t.s("title") } else { id }, "--body", &body], tp, 120000);

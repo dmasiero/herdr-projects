@@ -167,6 +167,7 @@ mod pull_requests_actions_only;
 mod pull_requests_already;
 mod pull_requests_checks;
 mod pull_requests_expected;
+mod pull_requests_follow_up;
 mod pull_requests_merge;
 mod pull_requests_no_checks_permission;
 mod real_terminal;

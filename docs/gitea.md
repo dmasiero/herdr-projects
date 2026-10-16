@@ -42,3 +42,6 @@ Set it for one repo: `herdr-projects set merge.forge gitea --repo dotfiles`.
 - **The review decision** is each reviewer's last say: one asking for changes blocks, one approving passes. Feedback
   wakes the agent as on GitHub, with `tea pr <n> --comments` to read it.
 - Gitea has no merge queue, and the board never sets Gitea's own auto-merge: it merges by itself once the checks pass.
+- **A pull request merged already** answers `HTTP 405: The PR is already merged` when merged again. The board reads that
+  as merged: the task is done, or its newer work goes in a follow-up pull request ([a pull request merged
+  already](follow-up.md)).
