@@ -216,8 +216,7 @@ pub fn pipeline(id: &str, g: &mut Guard, text: &str, keep_intent: bool, reason: 
             Err(_) if already::archived(Path::new(&tree)) => { fail(g, already::archived_failure(t.s("branch"), &tree), FailHow::default())?; return Ok(()); }
             Err(e) if e.msg.starts_with("prbase:") => {
                 let base = sync::main_branch(&root, &t);
-                // tea cannot change a pull request's base: on Gitea it is changed on the pull request's page.
-                let how = match crate::forge::cli_of(&root) { ("gh", _) => format!("gh pr edit <number> --base {base}"), (_, name) => format!("on its {name} page: Edit, target branch") };
+                let how = crate::forge::base_edit_how(&root, "<number>", &base);
                 fail(g, failure("pr", "The agent's pull request merges into another branch", &format!("Branch: {}\nFolder: {tree}\n\n{}", t.s("branch"), &e.msg[7..]), &format!("Change that pull request's base to {base} ({how}), or close it, then finish again. The board goes on with it once it merges into {base}.")), FailHow::default())?; return Ok(());
             }
             // The remote cannot be reached (main could not be fetched either): it waits, and goes on by itself.
