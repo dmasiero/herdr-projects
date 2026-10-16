@@ -3,7 +3,8 @@
 //! from the same branch, which is checked and waits for approval as any other. Gitea's HTTP 405 "already merged" and
 //! gh's "was already merged" are taken for merged. A chat with a task whose pull request the board merged (OPS-3) opens
 //! a follow-up too, instead of pushing to the merged one. A squash merge, or a merge into another base, with nothing
-//! new on the branch is done with that merge recorded, never followed up.
+//! new on the branch is done with that merge recorded, never followed up. A task started from a named branch
+//! (`workspace.from`) is compared with that branch, and its follow-up goes into it.
 use crate::common;
 use common::tea::{gitea_world, tea_log};
 use common::*;
@@ -211,4 +212,47 @@ fn a_task_found_done_by_a_sync_with_its_pull_request_merged_elsewhere_records_th
     assert_eq!(t.s("stage"), "done", "{} {}", t.s("msg"), t.at("failure"));
     assert!(t.b("prMerged"));
     assert_eq!(t.s("mergeCommit"), "m".repeat(40));
+}
+
+/// A task started from a named branch (`workspace.from develop`), whose pull request goes into develop.
+fn from_develop(w: &World, title: &str) -> String {
+    git(&w.root, &["push", "-q", "origin", "main:refs/heads/develop"]);
+    sw::store::settings::change::set_value("workspace.from", &json!("develop"), &sw::store::settings::lookup::Scope::you()).unwrap();
+    let id = to_approval(w, title);
+    assert!(gh_log(w).contains("--base develop"), "{}", gh_log(w));
+    id
+}
+
+#[test]
+fn a_task_started_from_a_named_branch_whose_pull_request_was_squash_merged_into_it_with_nothing_new_is_done() {
+    let w = pr_world();
+    let id = from_develop(&w, "On develop");
+    let t = task(&id);
+    squashed_into(&w, &t, "develop");
+    let mut v = merged_view(&head(&t));
+    v["baseRefName"] = json!("develop");
+    w.gh_says(json!({ "view": v }));
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "done", "{} {}", t.s("msg"), t.at("failure"));
+    assert!(t.s("msg").starts_with("Already merged: https://github.com/o/r/pull/7"), "{}", t.s("msg"));
+    assert!(t.b("prMerged"));
+}
+
+#[test]
+fn a_task_started_from_a_named_branch_gets_its_follow_up_into_that_branch() {
+    let w = pr_world();
+    let id = from_develop(&w, "Develop went on");
+    let t = task(&id);
+    // merged at the remote, but without the branch's work: newer work on the branch
+    let mut v = merged_view(&head(&t));
+    v["baseRefName"] = json!("develop");
+    w.gh_says(json!({ "view": v, "createUrl": "https://github.com/o/r/pull/8" }));
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "approval", "{}", t.at("failure"));
+    assert_eq!(t.s("pr"), "https://github.com/o/r/pull/8");
+    let log = gh_log(&w);
+    assert!(log.contains("--title Develop went on (follow-up)") && log.contains("Follow-up to https://github.com/o/r/pull/7.\n\nThat pull request was merged into develop"), "{log}");
+    assert!(log.trim_end().lines().filter(|l| l.contains("--base develop")).count() >= 2, "{log}");
 }

@@ -31,7 +31,8 @@ pub fn title_of(t: &Task) -> String { format!("{}{MARK}", if t.b("title") { t.t(
 pub fn open(g: &mut Guard, t: &Task, cwd: &Path, text: &str) -> Res<String> {
     let old = t.t("pr");
     let seen = view(cwd, &old).unwrap_or(Value::Null);
-    let base = seen.t("baseRefName");
+    // Into the branch the merged one went into; not said, the one the task lands on (its named branch, else main).
+    let base = if seen.b("baseRefName") { seen.t("baseRefName") } else if t.s("from").starts_with("origin/") { crate::sync::main_branch(cwd, t) } else { String::new() };
     let commit = seen.at("mergeCommit").t("oid");
     let at = if commit.is_empty() { String::new() } else { format!(" as {}", &commit[..commit.len().min(7)]) };
     let into = if base.is_empty() { String::new() } else { format!(" into {base}") };
@@ -42,7 +43,8 @@ pub fn open(g: &mut Guard, t: &Task, cwd: &Path, text: &str) -> Res<String> {
     if !base.is_empty() { a.extend(["--base", base.as_str()]); }
     let r = gh(&a, cwd, 120000);
     let mut url = r.stdout.split_whitespace().find(|w| w.starts_with("http://") || w.starts_with("https://")).unwrap_or("").to_string();
-    if url.is_empty() || url == old { url = open_pr(t.s("branch"), cwd).filter(|u| *u != old).unwrap_or_default(); }
+    // The agent opened one itself meanwhile: taken, when it merges into the same base.
+    if url.is_empty() || url == old { url = open_pr(t.s("branch"), cwd).filter(|p| p.url != old && (base.is_empty() || p.base.is_empty() || p.base == base)).map(|p| p.url).unwrap_or_default(); }
     if url.is_empty() { return Err(Error::new(format!("pr:{}", [r.stdout.trim(), r.stderr.trim()].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join("\n")))); }
     g.set(|t| {
         let mut earlier = t.arr("prEarlier").to_vec();

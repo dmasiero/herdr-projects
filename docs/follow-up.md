@@ -14,7 +14,8 @@ nothing into main. This is what happened on OPS-3: four files of work were left 
 Before it merges, the board asks GitHub or Gitea for the pull request's state. A refused merge that says "already
 merged" (Gitea's HTTP 405, gh's `was already merged`) counts as merged too, not as an unknown error. Then the board
 compares the task's branch with the branch it merged into, before it brings main in: does merging the branch there
-change anything? That holds for a squash merge and for a pull request into another branch than main.
+change anything? That holds for a squash merge and for a pull request into another branch than main, such as the
+branch a task started from (`workspace.from`): its follow-up goes into that branch too.
 
 - **Nothing new on the branch.** The task is done with that merge. Its row says `Already merged: <the pull request>`,
   and the merge commit is kept as the task's.
