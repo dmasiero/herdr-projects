@@ -1,6 +1,7 @@
 //! A task in a repo on Gitea: its pull request is opened through tea as a draft (`WIP:`), made ready and merged with
 //! `merge.method` at the reviewed commit, gh is never run, and a missing login or a missing tea is said plainly where
-//! the pull request could not be opened. A merge made elsewhere is found by the pull requests' watch.
+//! the pull request could not be opened. Its base is read as gh gives it. A merge made elsewhere is found by the pull
+//! requests' watch.
 use crate::common;
 use common::tea::{gitea_world, tea_log};
 use common::*;
@@ -85,4 +86,20 @@ fn a_review_decision_is_each_reviewers_last_say() {
     assert_eq!(decision(&[r("a", "COMMENTED")]), "");
     assert_eq!(sw::forge::gitea_view::without_wip("WIP: x"), "x");
     assert_eq!(sw::forge::gitea_view::without_wip("[wip] x"), "x");
+}
+
+#[test]
+fn a_pull_requests_base_is_read_as_gh_gives_it_and_changing_it_is_never_told_as_gh_pr_edit() {
+    let w = gitea_world(json!({}));
+    let gh = |a: &[&str]| { let r = sw::flow::git::gh(a, &w.root, 1000); assert_eq!(r.status, 0, "{}", r.stderr); r.stdout };
+    gh(&["pr", "create", "--head", "b", "--base", "develop", "--title", "T", "--body", ""]);
+    let listed: serde_json::Value = serde_json::from_str(&gh(&["pr", "list", "--head", "b", "--state", "all", "--limit", "10", "--json", "number,url,state,baseRefName"])).unwrap();
+    assert_eq!(listed[0].s("baseRefName"), "develop", "{listed}");
+    let viewed: serde_json::Value = serde_json::from_str(&gh(&["pr", "view", "7", "--json", "headRefOid,baseRefName"])).unwrap();
+    assert_eq!(viewed.s("baseRefName"), "develop", "{viewed}");
+    assert_eq!(gh_log(&w), "", "gh is never run for a repo on Gitea");
+    let how = sw::forge::base_edit_how(&w.root, "7", "main");
+    assert!(how.contains("Gitea page") && how.contains("main") && !how.contains("gh "), "{how}");
+    git(&w.root, &["remote", "set-url", "origin", "git@github.com:o/r.git"]);
+    assert_eq!(sw::forge::base_edit_how(&w.root, "7", "main"), "gh pr edit 7 --base main");
 }

@@ -85,6 +85,10 @@ pub fn of(cwd: &Path) -> Forge {
 /// The command line and the forge's name the board says for a folder's repo: tea and Gitea where it is on Gitea, or
 /// is to be and cannot be reached.
 pub fn cli_of(cwd: &Path) -> (&'static str, &'static str) { if of(cwd) == Forge::GitHub { ("gh", "GitHub") } else { ("tea", "Gitea") } }
+/// How to change a pull request's base, said in a hint: gh's command on GitHub; tea has none, so Gitea's page.
+pub fn base_edit_how(cwd: &Path, number: &str, base: &str) -> String {
+    match cli_of(cwd) { ("gh", _) => format!("gh pr edit {number} --base {base}"), (_, name) => format!("on its {name} page: Edit, target branch {base}") }
+}
 /// The Gitea repo of a folder, where it is one.
 pub fn gitea_repo(cwd: &Path) -> Option<Repo> { if let Forge::Gitea(r) = of(cwd) { Some(r) } else { None } }
 /// Said after gh's own error, where it found no GitHub host: the remote is not on GitHub, and how to reach it.
