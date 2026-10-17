@@ -1,5 +1,7 @@
 <p align="center"><img src="https://img.shields.io/badge/Herdr%20Projects-Mission%20control%20for%20Herdr-2ea44f?style=flat-square&labelColor=24292f" alt="Herdr Projects | Mission control for Herdr" /></p>
 
+<p align="center"><sub>This is a fork of <a href="https://github.com/eliasstravik/herdr-projects">eliasstravik/herdr-projects</a> that adds Gitea pull requests and NixOS support. How it follows upstream: <a href="FORK.md">FORK.md</a>.</sub></p>
+
 <h3 align="center">Run dozens of coding agents through one Coordinator without micromanaging each one or losing sight of what needs you</h3>
 
 <p align="center">Herdr Projects is mission control for <a href="https://herdr.dev">Herdr</a>: one list of tasks, yours and the ones you delegate. You type what needs doing and the board's own agent, the Coordinator, turns it into tasks. Every delegated task runs as an ordinary Herdr agent in its own space and worktree, gets checked and reviewed by a second agent when it finishes, and waits for your yes before it merges. The board shows which tasks need you, which are ready to approve and which are still working.</p>
