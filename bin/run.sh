@@ -25,6 +25,17 @@ run() { [ -n "$fetch_only" ] && exit 0; exec "$@"; }
 built="$root/target/release/herdr-projects"
 fresh() { [ -x "$built" ] && [ -z "$(find "$root/src" "$root/crates" "$root/Cargo.toml" "$root/Cargo.lock" -newer "$built" 2>/dev/null | head -n 1)" ]; }
 fresh && run "$built" "$@"
+# The fork (FORK.md) is built from this checkout, never downloaded: upstream's releases lack its changes. A fork with
+# releases of its own names them with HERDR_PROJECTS_RELEASES.
+if [ -f "$root/FORK_VERSION" ] && [ -z "${HERDR_PROJECTS_RELEASES:-}" ]; then
+  if [ -n "$fetch_only" ] && command -v cargo >/dev/null 2>&1; then
+    say "building the fork from source: cargo build --release (a few minutes)"
+    (cd "$root" && cargo build --release --locked) && exit 0
+  fi
+  [ -x "$built" ] && { say "using $built, which is older than its source: build it again (cd '$root' && cargo build --release)"; run "$built" "$@"; }
+  say "this fork is built from source, never downloaded: cd '$root' && cargo build --release (Rust: https://rustup.rs)"
+  exit 1
+fi
 
 want=$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' "$root/Cargo.toml" 2>/dev/null | head -n 1)
 case "$(uname -s)" in Linux) os=linux ;; Darwin) os=macos ;; *) os="" ;; esac

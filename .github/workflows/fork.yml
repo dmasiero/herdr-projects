@@ -1,0 +1,88 @@
+# The fork's own CI (FORK.md), beside upstream's ci.yml, which runs the whole check on Ubuntu unchanged: the fork's
+# layer on its own (Gitea pull requests through a faked tea, the PR follow-up, the fork version, the NixOS login shell);
+# Nix on Ubuntu (the flake checked and built, the whole check with the dev shell's tools); and NixOS itself: the whole
+# check in a NixOS VM (nix/nixos-check.nix), where /etc/NIXOS and NixOS's own folders are.
+name: Fork
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  layer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache the build
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: fork-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: fork-${{ runner.os }}-
+
+      - name: The fork's tests (Gitea with tea faked, follow-up PRs, version, NixOS login shell)
+        env:
+          GIT_AUTHOR_NAME: ci
+          GIT_AUTHOR_EMAIL: ci@example.com
+          GIT_COMMITTER_NAME: ci
+          GIT_COMMITTER_EMAIL: ci@example.com
+        run: npm run check gitea pull_requests_follow_up fork nixos_login_env login_env install
+
+  nix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: experimental-features = nix-command flakes
+
+      - name: nix flake check
+        run: nix flake check
+
+      - name: nix build
+        run: nix build && ./result/bin/herdr-projects version
+
+      - name: The whole check in the dev shell
+        env:
+          GIT_AUTHOR_NAME: ci
+          GIT_AUTHOR_EMAIL: ci@example.com
+          GIT_COMMITTER_NAME: ci
+          GIT_COMMITTER_EMAIL: ci@example.com
+        run: nix develop --command npm run check -- --all
+
+  nixos:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      # GitHub's Linux runners have KVM, for the VM: let the runner's user open it.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            system-features = nixos-test benchmark big-parallel kvm
+
+      - name: The whole check on NixOS (a VM)
+        run: nix build .#nixos-check -L

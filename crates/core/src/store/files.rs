@@ -20,8 +20,9 @@ pub const SLOT_STAGES: &[&str] = &["starting", "setup", "working", "checking", "
 /// Stages owned by a runner (a long job of ours), as opposed to the agent's own turn.
 pub const RUNNER_STAGES: &[&str] = &["starting", "setup", "checking", "pushing", "reviewing", "merging"];
 pub const KINDS: &[&str] = &["permission", "question", "auth"];
-/// The version of this program: what the marks and the keeper compare.
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// The version of this program: what the marks and the keeper compare. The fork adds its own part after upstream's
+/// (`1.2.2+masiero.1`, FORK_VERSION at the repo's root, FORK.md).
+pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "+", include_str!("../../../../FORK_VERSION"));
 
 // Everything the board keeps for a user is in one folder, the same on every machine: ~/.herdr-projects, with a
 // sub-folder for each kind of thing (docs/home-folder.md). HERDR_PROJECTS_HOME names another one; each sub-folder
