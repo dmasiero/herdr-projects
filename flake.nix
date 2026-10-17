@@ -33,6 +33,12 @@
         default = herdr-projects;
       });
 
+      # The whole check on a real NixOS VM (nix/nixos-check.nix): `nix build .#nixos-check`. Not among `checks`, so
+      # `nix flake check` stays quick; CI's NixOS job and the sync script build it.
+      legacyPackages = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (system: {
+        nixos-check = import ./nix/nixos-check.nix { pkgs = nixpkgs.legacyPackages.${system}; src = self; };
+      });
+
       devShells = each (pkgs: {
         default = pkgs.mkShell {
           # curl fetches the shared build cache (scripts/build-cache.sh); the tests take locks with util-linux's flock,

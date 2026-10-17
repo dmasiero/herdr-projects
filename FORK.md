@@ -49,10 +49,13 @@ own (in `$TMPDIR`, or `--dir`). It then:
 2. merges upstream into `sync/upstream-<version>` (with the date added when that name is taken);
 3. starts the fork's own number again on a new upstream version (`FORK_VERSION`: `masiero.4` becomes `masiero.1`);
 4. runs the whole check, `npm run check -- --all`: every test, upstream's and the fork's, with GitHub (`gh` faked) and
-   Gitea (`tea` faked). On NixOS that is the NixOS paths, elsewhere the plain Linux ones; CI runs both;
-5. runs `nix flake check` and `nix build` where Nix is installed;
+   Gitea (`tea` faked), on this machine's system: NixOS's paths on NixOS, plain Linux's elsewhere;
+5. where Nix is installed, runs `nix flake check` and `nix build`, and, where KVM is too, the whole check on NixOS in a
+   VM (`nix build .#nixos-check`, `nix/nixos-check.nix`). So a NixOS machine with KVM covers NixOS twice and plain
+   Linux not at all, and a plain Linux machine with Nix and KVM covers both; the pull request text says which ran;
 6. pushes the branch to `origin` and opens a pull request to the fork's `main` with upstream's commits, the conflicts,
-   what was checked and where, and the size of the layer after it.
+   what was checked and where, and the size of the layer after it. Its CI then runs both systems whatever machine
+   ran the script: the whole check on Ubuntu, and on NixOS in a VM (below). Merge it only when both pass.
 
 It refuses to push when `origin` and `upstream` are the same repo. Exit codes, for an agent: 0 done or nothing new, 1
 an error, 3 conflicts to resolve, 4 the check failed.
@@ -74,7 +77,7 @@ Kept small so syncs rarely conflict: fork-only files wherever possible, and a fe
 there is no other way in. `git diff --stat upstream/main main` lists them as they are now.
 
 **Fork-only files** (upstream has none of them, so they never conflict): `FORK.md`, `FORK_VERSION`,
-`flake.nix`, `flake.lock`, `scripts/cargo.sh`, `scripts/sync-upstream.sh`, `.github/workflows/fork.yml`,
+`flake.nix`, `flake.lock`, `nix/nixos-check.nix`, `scripts/cargo.sh`, `scripts/sync-upstream.sh`, `.github/workflows/fork.yml`,
 `crates/core/src/forge.rs` and `crates/core/src/forge/` (`gitea.rs`, `gitea_checks.rs`, `gitea_view.rs`, `tea.rs`),
 `crates/core/src/login_env/nixos.rs`, `crates/flow/src/finish/follow_up.rs`, `crates/flow/src/land/merged.rs`,
 `docs/gitea.md`, `docs/nixos.md`, `docs/follow-up.md`, and the tests `tests/fork.rs`, `tests/gitea.rs`,
@@ -119,7 +122,13 @@ tests, and the macOS sandbox test. `.github/workflows/fork.yml` adds:
 - **layer**: the fork's own tests by name (Gitea with `tea` faked, follow-up PRs, version, NixOS login shell), so a
   failure in the layer shows as its own red job;
 - **nix**: `nix flake check`, `nix build` (and the built program's version), and the whole check inside
-  `nix develop`, with Nix's Rust and mold.
+  `nix develop`, with Nix's Rust and mold. This is still Ubuntu: Nix's tools, not a NixOS system;
+- **nixos**: the whole check on a real NixOS, in a VM (`nix build .#nixos-check`, `nix/nixos-check.nix`): `/etc/NIXOS`,
+  next to nothing in `/usr/bin` and `/bin`, programs in `/run/current-system/sw/bin`, coreutils as one program, the
+  SSH agent from `programs.ssh.startAgent`. The NixOS paths of `scripts/linker.sh`, `bin/run.sh`, `bare_path` and the
+  real-program tests run here. It needs KVM, which GitHub's Linux runners have.
+
+Together with upstream's Check job (the whole check on Ubuntu), every change is checked on plain Linux and on NixOS.
 
 GitHub turns Actions off on a new fork: turn them on once under the fork's Actions tab. `release.yml` is upstream's and
 stays unused: the fork pushes no `v*` tags.

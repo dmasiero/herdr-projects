@@ -1,7 +1,7 @@
 #!/bin/sh
 # The fork's sync with upstream (FORK.md): merges upstream's main into a `sync/upstream-<version>` branch made from the
-# fork's main, in a worktree of its own, runs the whole check (and the Nix build where Nix is), and opens a pull
-# request to the fork's main with what upstream changed and which files conflicted. By hand or by an agent:
+# fork's main, in a worktree of its own, runs the whole check on this machine (and, where Nix is, the Nix build and the
+# whole check in a NixOS VM), and opens a pull request to the fork's main with what upstream changed and which files conflicted. By hand or by an agent:
 #   sh scripts/sync-upstream.sh              fetch, merge, check, push the branch, open the pull request
 #   sh scripts/sync-upstream.sh --no-pr      the same, but push and open nothing
 #   sh scripts/sync-upstream.sh --continue   after resolving conflicts in the worktree it named: commit, check, open
@@ -86,7 +86,8 @@ if [ "$new" != "$old" ] && [ "${part##*.}" != 1 ]; then
   git commit --quiet -m "Fork version $new+$(cat FORK_VERSION)" FORK_VERSION
 fi
 
-# The whole check: every test, the fork's Gitea (tea faked) and NixOS ones among them, on the paths of this machine.
+# The whole check: every test, the fork's Gitea (tea faked) and NixOS ones among them, on the paths of this machine
+# (NixOS's on NixOS, plain Linux's elsewhere). The other system's run is the NixOS VM below, or CI's.
 say "running the whole check (npm run check -- --all)"
 log="$st.check.log"
 if ! npm run check -- --all > "$log" 2>&1; then tail -n 40 "$log" >&2; die "the check failed: fix it in $dir, commit, then --continue (log: $log)" 4; fi
@@ -97,7 +98,12 @@ if [ "$nix" = 1 ] && command -v nix >/dev/null 2>&1; then
   say "nix flake check and nix build"
   nix flake check > "$st.nix.log" 2>&1 && nix build --no-link >> "$st.nix.log" 2>&1 || { tail -n 30 "$st.nix.log" >&2; die "the Nix build failed (log: $st.nix.log)" 4; }
   nixsaid="nix flake check and nix build passed"
-elif [ "$nix" = 1 ]; then nixsaid="not run: no nix on this machine (CI's Nix job runs it)"; fi
+  if [ -w /dev/kvm ] && [ "$(uname -s)" = Linux ]; then
+    say "the whole check on NixOS, in a VM (nix build .#nixos-check)"
+    nix build --no-link -L .#nixos-check >> "$st.nix.log" 2>&1 || { tail -n 40 "$st.nix.log" >&2; die "the check in the NixOS VM failed (log: $st.nix.log)" 4; }
+    nixsaid="$nixsaid; the whole check in a NixOS VM passed"
+  else nixsaid="$nixsaid; the NixOS VM check not run here (no KVM): CI's NixOS job runs it"; fi
+elif [ "$nix" = 1 ]; then nixsaid="not run: no nix on this machine (CI's Nix and NixOS jobs run them)"; fi
 [ -f /etc/NIXOS ] && where="NixOS ($(uname -m))" || where="$(uname -s) $(uname -m)"
 
 body="$st.pr.md"
@@ -117,8 +123,10 @@ body="$st.pr.md"
   echo
   echo "## Checked on $where"
   echo
-  echo "- \`npm run check -- --all\`: $checked"
+  echo "- \`npm run check -- --all\` on this machine: $checked"
   echo "- Nix: $nixsaid"
+  echo "- CI on this pull request: the whole check on Ubuntu (Check), the fork's tests, Nix on Ubuntu and the whole"
+  echo "  check in a NixOS VM (Fork). Merge only when both workflows pass."
   echo
   echo "## The fork's layer after the merge"
   echo
