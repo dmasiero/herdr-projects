@@ -1,6 +1,6 @@
-# herdr-projects for Nix: the program as a package (`nix build`, `nix profile install`), and a shell with what building
-# and checking this repo needs (`nix develop`: Rust, mold, Node for `npm run check`, git, curl, flock, ps).
-# docs/nixos.md.
+# herdr-projects for Nix (the fork's own file, FORK.md): the program as a package (`nix build`, `nix profile
+# install`), and a shell with what building and checking this repo needs (`nix develop`: Rust, mold, Node for
+# `npm run check`, git, curl, flock, ps). docs/nixos.md.
 {
   description = "A work board for herdr";
 
@@ -10,7 +10,9 @@
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       each = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
-      version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
+      # Upstream's version and the fork's own part, as the program says it (`1.2.2+masiero.1`, FORK.md).
+      version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version
+        + "+" + nixpkgs.lib.fileContents ./FORK_VERSION;
     in {
       packages = each (pkgs: rec {
         herdr-projects = pkgs.rustPlatform.buildRustPackage {
@@ -23,7 +25,7 @@
           doCheck = false;
           meta = {
             description = "A work board for herdr";
-            homepage = "https://github.com/eliasstravik/herdr-projects";
+            homepage = "https://github.com/dmasiero/herdr-projects";
             license = pkgs.lib.licenses.mit;
             mainProgram = "herdr-projects";
           };

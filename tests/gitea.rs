@@ -1,7 +1,8 @@
 //! A task in a repo on Gitea: its pull request is opened through tea as a draft (`WIP:`), made ready and merged with
 //! `merge.method` at the reviewed commit, gh is never run, and a missing login or a missing tea is said plainly where
 //! the pull request could not be opened. Its base is read as gh gives it. A merge made elsewhere is found by the pull
-//! requests' watch.
+//! requests' watch. A task started from a named branch opens its pull request into it and merges only while it still
+//! merges there.
 use crate::common;
 use common::tea::{gitea_world, tea_log};
 use common::*;
@@ -31,6 +32,27 @@ fn a_pull_request_on_gitea_is_opened_as_a_draft_made_ready_and_merged_with_the_m
     assert!(log.contains(&format!("POST repos/o/r/pulls/7/merge {{\"Do\":\"rebase\",\"head_commit_id\":\"{reviewed}\"}}")), "{log}");
     assert_eq!(gh_log(&w), "", "gh is never run for a repo on Gitea");
     assert_eq!(git(&w.root, &["ls-remote", "--heads", "origin", &branch]), "", "the merged branch is gone at the remote");
+}
+
+#[test]
+fn started_from_a_named_branch_its_gitea_pull_request_merges_into_it_and_a_moved_base_is_refused_in_giteas_words() {
+    let w = gitea_world(json!({ "review.when": "never" }));
+    git(&w.root, &["push", "-q", "origin", "HEAD:refs/heads/develop"]);
+    sw::store::settings::change::set_value("workspace.from", &json!("develop"), &sw::store::settings::lookup::Scope::you()).unwrap();
+    let id = to_approval(&w, "On develop");
+    assert!(tea_log(&w).contains("\"base\":\"develop\""), "{}", tea_log(&w));
+    w.tea.pulls.borrow_mut()[0]["base"]["ref"] = json!("main");
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.at("failure").s("title"), "The pull request merges into main, not develop", "{}", t.at("failure"));
+    let next = t.at("failure").s("next").to_string();
+    assert!(next.contains("back to develop") && next.contains("Gitea page") && !next.contains("gh pr edit"), "{next}");
+    w.tea.pulls.borrow_mut()[0]["base"]["ref"] = json!("develop");
+    w.tea_says(json!({ "head": task(&id).at("prHead").clone() }));
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "done", "{}", t.at("failure"));
+    assert_eq!(gh_log(&w), "");
 }
 
 #[test]
