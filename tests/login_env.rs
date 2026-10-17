@@ -1,45 +1,41 @@
-//! What the board's processes take from a login shell (`sw::login_env`) besides the PATH and gh's login: the SSH agent,
-//! which git needs to fetch and push over SSH, taken only by a process that has none of its own, and asked for again.
+//! What the keeper takes from a login shell when herdr's server started it without: the SSH agent (`SSH_AUTH_SOCK`,
+//! `SSH_AGENT_PID`) for its `git fetch` and `git push` over SSH, only for a process with no agent of its own, only a
+//! socket that is there, and with only its names remembered in `env.json`.
 use crate::common;
-use sw::login_env::ssh_agent;
+use common::*;
+use sw::login_env::{remembered, ssh_agent};
+
+fn pair(k: &str, v: &str) -> (String, String) { (k.to_string(), v.to_string()) }
 
 #[test]
 fn a_keeper_started_without_an_ssh_agent_takes_the_login_shells_and_a_process_with_its_own_keeps_it() {
-    let out = "PATH=/a/bin\nSSH_AUTH_SOCK=/run/user/1000/ssh-agent\nSSH_AGENT_PID=\nHOME=/home/me\n";
-    assert_eq!(ssh_agent(out, |_| false), vec![("SSH_AUTH_SOCK".to_string(), "/run/user/1000/ssh-agent".to_string())]);
-    assert!(ssh_agent(out, |k| k == "SSH_AUTH_SOCK").is_empty(), "an agent of its own is kept");
-    assert!(ssh_agent("PATH=/x\n", |_| false).is_empty(), "a login shell with no agent gives none");
+    let w = world();
+    let out = format!("Welcome\nPATH=/a/bin\nSSH_AUTH_SOCK={}\nSSH_AGENT_PID=4242\nHOME=/home/me\n", w.socket);
+    assert_eq!(ssh_agent(&out, |_| false), vec![pair("SSH_AUTH_SOCK", &w.socket), pair("SSH_AGENT_PID", "4242")]);
+    assert!(ssh_agent(&out, |k| k == "SSH_AUTH_SOCK").is_empty(), "an agent of its own is kept");
+    assert!(ssh_agent(&out, |k| k == "SSH_AGENT_PID").is_empty(), "an agent of its own is kept");
+    assert!(ssh_agent("PATH=/x\nSSH_AUTH_SOCK=\n", |_| false).is_empty());
 }
 
 #[test]
-fn user_env_takes_the_agent_a_profile_names_from_xdg_runtime_dir_and_asks_again_only_when_it_has_none() {
-    let w = common::world();
-    // A login shell whose profile names the agent from XDG_RUNTIME_DIR, as NixOS's programs.ssh.startAgent does.
-    let shell = w.base.join("login-sh");
-    std::fs::write(&shell, "#!/bin/sh\necho \"PATH=$PATH\"\n[ -z \"$XDG_RUNTIME_DIR\" ] || echo \"SSH_AUTH_SOCK=$XDG_RUNTIME_DIR/ssh-agent\"\n").unwrap();
-    std::fs::set_permissions(&shell, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
-    let keep: Vec<(&str, Option<String>)> = ["SHELL", "PATH", "SSH_AUTH_SOCK", "SSH_AGENT_PID", "XDG_RUNTIME_DIR"].iter().map(|k| (*k, std::env::var(k).ok())).collect();
-    let run = w.base.join("run");
-    let start = |own: Option<&str>| unsafe {
-        std::env::remove_var("HERDR_PROJECTS_ENV_OK");
-        std::env::set_var("HERDR_PLUGIN_ID", "herdr-projects");
-        std::env::set_var("SHELL", &shell);
-        std::env::set_var("XDG_RUNTIME_DIR", &run);
-        for k in ["SSH_AUTH_SOCK", "SSH_AGENT_PID"] { std::env::remove_var(k); }
-        if let Some(s) = own { std::env::set_var("SSH_AUTH_SOCK", s); }
-        sw::login_env::user_env();
-        std::env::var("SSH_AUTH_SOCK").ok()
-    };
-    let agent = format!("{}/ssh-agent", run.display());
-    let first = start(None);
-    let own = start(Some("/own/agent"));
-    // the names are remembered (env.json, fresh now): a process with none asks the login shell again
-    let again = start(None);
-    unsafe {
-        std::env::remove_var("HERDR_PLUGIN_ID");
-        for (k, v) in keep { match v { Some(v) => std::env::set_var(k, v), None => std::env::remove_var(k) } }
-    }
-    assert_eq!(first.as_deref(), Some(agent.as_str()));
-    assert_eq!(own.as_deref(), Some("/own/agent"), "an agent of its own is kept");
-    assert_eq!(again.as_deref(), Some(agent.as_str()));
+fn an_ssh_agent_whose_socket_is_not_there_is_not_taken() {
+    let w = world();
+    let gone = w.base.join("gone.sock").display().to_string();
+    assert!(ssh_agent(&format!("SSH_AUTH_SOCK={gone}\nSSH_AGENT_PID=4242\n"), |_| false).is_empty());
+    let file = w.base.join("a.txt"); std::fs::write(&file, "x").unwrap();
+    assert!(ssh_agent(&format!("SSH_AUTH_SOCK={}\n", file.display()), |_| false).is_empty(), "a file that is no socket");
+}
+
+#[test]
+fn env_json_remembers_the_names_of_the_ssh_agent_and_of_gh_login_never_their_values() {
+    let w = world();
+    let out = format!("PATH=/a/bin\nSSH_AUTH_SOCK={}\nSSH_AGENT_PID=4242\nGH_TOKEN=s3cret\n", w.socket);
+    let c = serde_json::Value::Object(remembered(&out, "/fallback"));
+    assert_eq!(c["ssh"], serde_json::json!(["SSH_AUTH_SOCK", "SSH_AGENT_PID"]));
+    assert_eq!(c["gh"], serde_json::json!(["GH_TOKEN"]));
+    assert_eq!(c["PATH"], "/a/bin");
+    let text = c.to_string();
+    for v in [w.socket.as_str(), "4242", "s3cret"] { assert!(!text.contains(v), "{v} written down: {text}"); }
+    assert_eq!(serde_json::Value::Object(remembered("HOME=/h\n", "/fallback"))["ssh"], serde_json::json!([]));
+    assert_eq!(serde_json::Value::Object(remembered("HOME=/h\n", "/fallback"))["PATH"], "/fallback");
 }
