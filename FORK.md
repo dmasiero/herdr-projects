@@ -31,6 +31,9 @@ git then sees them as never merged, and the next sync conflicts on every line th
 1.2.1 sync, #3); the 1.2.2 sync was merged against the upstream commit that squash matched, to repair it. The fork's
 own feature pull requests can be squashed as you like.
 
+The board squashes by default (`merge.method squash`). A sync that the board merges, as a task or an automation, needs
+`merge.method merge`: `herdr-projects set merge.method merge --task <id>` (or `--automation <name>`) before you approve.
+
 ## Syncing with upstream
 
 ```sh
@@ -62,8 +65,8 @@ conflict in a made table (`docs/keys.md`, `docs/settings.md`) is settled by runn
 
 **How often.** Upstream releases often (four releases in three days around 1.2.x). Sync on each upstream release, at
 most once a day: run by hand when you see a release, or make it a daily board automation that runs the script; it
-exits at once when there is nothing new, and its pull request still waits for your review. Syncing often keeps each
-merge small.
+exits at once when there is nothing new, and its pull request still waits for your review (merged with a merge
+commit, above). Syncing often keeps each merge small.
 
 ## The layer
 
