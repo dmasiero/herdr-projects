@@ -1,10 +1,11 @@
 # NixOS and Nix
 
 **The plugin works on NixOS as it is.** Install it the usual way ([installing](install.md)). The downloaded program is
-built for musl and linked statically, so it runs on NixOS too.
+built for musl and linked statically, so it runs on NixOS too. The flake, the NixOS test setup and this page are the
+fork's own ([FORK.md](../FORK.md)): the fork itself is built from source, never downloaded.
 
 ```sh
-herdr plugin install eliasstravik/herdr-projects
+herdr plugin install dmasiero/herdr-projects   # the fork: its build step builds the program (Rust needed)
 ```
 
 ## What you need
@@ -21,8 +22,8 @@ program found elsewhere first is the one that runs.
 The repo is a flake. Its package is the program built from source:
 
 ```sh
-nix profile install github:eliasstravik/herdr-projects   # herdr-projects on your PATH
-nix run github:eliasstravik/herdr-projects -- doctor     # once, without installing it
+nix profile install github:dmasiero/herdr-projects   # herdr-projects on your PATH
+nix run github:dmasiero/herdr-projects -- doctor     # once, without installing it
 ```
 
 In a NixOS or Home Manager configuration, add the flake as an input and its package to your packages

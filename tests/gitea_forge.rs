@@ -12,7 +12,7 @@ fn remote(h: &str, o: &str, n: &str) -> Option<Remote> { Some(Remote { host: h.i
 
 #[test]
 fn a_remote_is_read_in_each_of_its_forms_and_a_folder_has_no_host() {
-    assert_eq!(parse_remote("ssh://git@gitea.masiero.internal:2222/doug/dotfiles.git"), remote("gitea.masiero.internal", "doug", "dotfiles"));
+    assert_eq!(parse_remote("ssh://git@gitea.example.lan:2222/someone/dotfiles.git"), remote("gitea.example.lan", "someone", "dotfiles"));
     assert_eq!(parse_remote("git@github.com:o/r.git"), remote("github.com", "o", "r"));
     assert_eq!(parse_remote("https://Gitea.Example.org/sub/o/r/"), remote("gitea.example.org", "o", "r"));
     assert_eq!(parse_remote("https://user:token@host.test:3000/o/r"), remote("host.test", "o", "r"));
