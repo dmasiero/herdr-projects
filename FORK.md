@@ -34,6 +34,21 @@ own feature pull requests can be squashed as you like.
 The board squashes by default (`merge.method squash`). A sync that the board merges, as a task or an automation, needs
 `merge.method merge`: `herdr-projects set merge.method merge --task <id>` (or `--automation <name>`) before you approve.
 
+**Delete a branch once it is merged or superseded**, so `origin` holds only `main` and open work. The cleanup with the
+1.2.2 sync (2026-10-17) deleted these from `origin`:
+
+| Branch | Why |
+| --- | --- |
+| `legacy` | Merged into `main`. |
+| `work/1-support-gitea-pull-requests-vi` | Merged into `main` (Gitea pull requests). |
+| `work/10-release-herdr-projects-1-0-1` | Merged into `main`. |
+| `work/5-6-9-release-herdr-projects-1-0` | Merged into `main`. |
+| `gitea-tea-support` | Superseded by `main`; its one test `main` lacked moved to `tests/gitea.rs`. |
+| `nixos-support` | Superseded by `main` (the NixOS layer, `crates/core/src/login_env/nixos.rs`, the flake). |
+| `hp/herdr-projects/t-0058-agent-driven-rename` | The same commit as upstream's branch of that name: upstream's work. |
+| `work/2-1-9-last-rust-release-0-2-35-w` | The same commit as upstream's branch of that name: upstream's work. |
+| `work/7-board-misses-an-agent-finishin` | The same commit as upstream's branch of that name: upstream's work. |
+
 ## Syncing with upstream
 
 ```sh
@@ -216,4 +231,4 @@ Not done yet, on purpose: the fork is private use for now.
       Without releases, users build from source as above.
 - [ ] **GitHub settings**: Actions on, Issues on, "Allow merge commits" on (sync PRs need it), a default branch
       protection on `main` that requires the Check and Fork workflows.
-- [ ] **Stale branches**: only `main` and open work on `origin`.
+- [ ] **Stale branches**: only `main` and open work on `origin` (see Branches).
