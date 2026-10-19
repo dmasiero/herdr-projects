@@ -19,6 +19,10 @@ measured against the original.
 - **+** attaches files. Pasting a picture or dropping files works too.
 - **The mic** dictates.
 - **Escape** goes one step back, as on the terminal board. The draft stays.
+- **Sending keeps the keyboard up** on a phone: the round button and **Send + start** never take the focus from the box,
+  as the web UI's Send does, so you can type the next message at once. A tap while the keyboard still composes the last
+  word (some Android keyboards compose every word) finishes that word and sends it; one that does not finish it at once
+  says `Finish the word, then send.`
 
 ## What is the same as the web UI
 
@@ -74,7 +78,7 @@ Measured against **herdr-web-ui 0.4.8** (see [how](#how-it-was-measured)):
 | the lock that keeps a draft with who it was typed for | a filled chip in the lower left, beside the add button, only while the page shows somebody else: `To: HSW-34 agent · not who is shown above`. Attaching a file locks it as typing does |
 | the box's colour by who you type to ([colours](colours.md)) | the card's border: the plain text colour for the Coordinator, the task's status colour for its agent. The web UI's border is grey and turns to its accent on focus; here the border already says who, so focus draws a ring of that same colour round it |
 | the two ways to send | the round button and enter send. **Send + start** and tab, while there are words and it applies, send and put an agent on what it adds. **Send + start** is a chip of the web UI's (the shape of its one-tap replies). Each says in its tooltip what it does with the words |
-| the switch between the Coordinator and the task's agent, and the conversation | over the box, as wide as it: the web UI's segmented switch, Hide and Show, and the conversation in a panel of its own that scrolls back ([the web UI](web-ui.md)) |
+| who you talk to (the Coordinator or the task's agent), and the conversation | over the box, as wide as it: one button that names who gets your words and flips it, Hide and Show, and the conversation in a panel of its own that scrolls back and goes full screen ([the web UI](web-ui.md)) |
 | the notice after sending | above the chat, as before |
 | a draft is never lost | it is kept with who it is for, also over a reload. While a message is on its way the words stay in the box and a second enter does nothing. Words the board could not take stay in the box |
 | a device that may only watch | the box is faded and says so |
