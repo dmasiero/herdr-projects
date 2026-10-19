@@ -72,6 +72,7 @@ impl sw::herdr::cli::Fake for NoCodex {
         self.0.run(args, input)
     }
     fn kids(&self, pid: i64) -> Vec<i64> { self.0.kids(pid) }
+    fn wired_to(&self, pid: i64, group: &[i64]) -> Option<bool> { self.0.wired_to(pid, group) }
     fn kill(&self, pid: i64) { self.0.kill(pid) }
 }
 

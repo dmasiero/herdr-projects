@@ -1,5 +1,6 @@
 //! A clean-up put off because the task's space was in use (a command of yours, a tool the agent started, an agent herdr
-//! cannot place, a turn in its own terminal) is tried again by the housekeeping pass once the space is free.
+//! cannot place, a turn in its own terminal) is tried again by the housekeeping pass once the space is free. The helpers an
+//! agent keeps in its own process group (an MCP server) are part of it, not a command in use.
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
@@ -141,4 +142,71 @@ fn a_clean_up_put_off_because_the_space_was_in_use_is_tried_again_by_itself_once
     assert!(tree.join("more.txt").exists()); assert_eq!(git(&w.root, &["log", "-1", "--format=%s", t.s("branch")]), "more");
     assert_eq!(pass(&w, &id), 0);
     unsafe { std::env::remove_var("HERDR_PROJECTS_QUIET_MS") };
+}
+
+#[test]
+fn a_helper_the_agent_keeps_in_its_own_process_group_does_not_keep_a_merged_task_open() {
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    // an MCP server, or the native program an npm wrapper starts: in the agent's process group, so part of the agent
+    w.script(json!({ "worker": [{ "files": { "m.txt": "x\n" }, "commit": "m", "note": "Did it." }] }));
+    let id = w.add("With a helper");
+    delegate(&id);
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "approval", "{}", t.at("failure"));
+    pane(&w, t.at("link").s("pane"), |p| p["helper"] = json!(true));
+    sw::actions::finish_line::approve(&id, None, false).unwrap();
+    let c = settle(&id);
+    assert_eq!(c.s("stage"), "done", "{}", c.at("failure"));
+    assert!(!c.b("kept") && !c.b("tidy"), "{}", kept(&c));
+    assert!(gone(&w, &t), "its space left herdr's sidebar");
+    // the agent's own program under an npm wrapper uses the terminal, and is the agent all the same
+    let t = merged_with(&w, "wrapped");
+    assert!(!task(t.s("id")).b("kept") && gone(&w, &t), "{}", kept(&task(t.s("id"))));
+    // a command on the terminal in the agent's own group is at work: kept until it ends
+    let t = merged_with(&w, "child");
+    let (id, p) = (t.t("id"), t.at("link").t("pane"));
+    assert!(kept(&task(&id)).contains("in use again"), "{}", kept(&task(&id))); assert!(open_and_kept(&w, &t));
+    pane(&w, &p, |p| p["child"] = json!(false));
+    assert_eq!(pass(&w, &id), 1);
+    assert!(gone(&w, &t));
+}
+/// A task approved and merged while its agent's pane has `flag` set.
+fn merged_with(w: &World, flag: &str) -> Obj {
+    w.script(json!({ "worker": [{ "files": { format!("{flag}.txt"): "x\n" }, "commit": flag, "note": "Did it." }] }));
+    let id = w.add(&format!("With {flag}"));
+    delegate(&id);
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "approval", "{}", t.at("failure"));
+    pane(w, t.at("link").s("pane"), |p| p[flag] = json!(true));
+    sw::actions::finish_line::approve(&id, None, false).unwrap();
+    let c = settle(&id);
+    assert_eq!(c.s("stage"), "done", "{}", c.at("failure"));
+    t
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn real_programs_a_helper_is_wired_to_the_agent_and_a_command_left_running_is_not() {
+    use std::process::{Command, Stdio};
+    let me = std::process::id() as i64;
+    let sleep = |i: Stdio, o: Stdio| Command::new("sleep").arg("30").stdin(i).stdout(o).stderr(Stdio::null()).spawn().unwrap();
+    let wired = |c: &std::process::Child, group: &[i64]| sw::herdr::procs::real_wired_to(c.id() as i64, group);
+    // talks to this process through pipes, as an MCP server does with its agent: a helper
+    let mut piped = sleep(Stdio::piped(), Stdio::piped());
+    assert_eq!(wired(&piped, &[me, piped.id() as i64]), Some(true));
+    assert_eq!(wired(&piped, &[piped.id() as i64]), Some(false), "the other end is held by no process of the group");
+    // through a socket pair, as Claude Code wires its MCP servers
+    let (a, b) = std::os::unix::net::UnixStream::pair().unwrap();
+    let (a2, _b2) = std::os::unix::net::UnixStream::pair().unwrap();
+    let mut socket = sleep(Stdio::from(std::os::fd::OwnedFd::from(a)), Stdio::from(std::os::fd::OwnedFd::from(a2)));
+    assert_eq!(wired(&socket, &[me, socket.id() as i64]), Some(true));
+    drop(b);
+    // a command with its input and output put away, or into a file: no helper, at work
+    let mut null = sleep(Stdio::null(), Stdio::null());
+    assert_eq!(wired(&null, &[me, null.id() as i64]), Some(false));
+    let file = std::fs::File::create(std::env::temp_dir().join(format!("hp-wired-{me}.log"))).unwrap();
+    let mut logged = sleep(Stdio::piped(), Stdio::from(file));
+    assert_eq!(wired(&logged, &[me, logged.id() as i64]), Some(false));
+    for c in [&mut piped, &mut socket, &mut null, &mut logged] { let _ = c.kill(); let _ = c.wait(); }
+    let _ = std::fs::remove_file(std::env::temp_dir().join(format!("hp-wired-{me}.log")));
 }
