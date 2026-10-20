@@ -156,7 +156,7 @@ themselves, and the `Alt` keys are the ones you press all the time. Give a key y
 the error when you mistype one), then `=`, then the chord.
 
 ```
-herdr-projects set board.keys "chatMessage=ctrl+o, chatScrollUp=ctrl+up, chatScrollDown=ctrl+down"
+herdr-projects set board.keys "chatMessage=ctrl+g, chatScrollUp=ctrl+up, chatScrollDown=ctrl+down"
 ```
 
 - **The key then answers to your chord only.** Its old chord does nothing. The `?` menu, the hint line and the board's
@@ -198,11 +198,12 @@ The tables below always show the chords the board comes with.
 | `Ctrl+X` | stop the agent, when one is running (working, starting, checking, under review, or waiting for your answer); the selection stays where you were, on the next row when the stopped task moves to another group. On a task with no agent running (idle, never started, stopped, finished, archived) it asks to remove the task instead: `y` removes it, its worktree too. A task you marked as your own work in progress has no agent to stop: there the key puts it back in to do. A stop never goes on to that question by itself: removing takes a second `Ctrl+X`, and a `y`. On an automation's row: remove the automation (it asks first; the tasks it made stay) |
 | `Ctrl+A` | archive the selected task, or restore it from the archive |
 | `Ctrl+P` | pin the selected task to the top, or unpin it |
-| `Ctrl+E` `Ctrl+U` | the selected task's settings, full screen: every work setting by its name and its value. `↑` `↓` move to a row; `Enter` changes it (a switch or a choice goes to its next value, anything else is typed and saved with `Enter`); rows set for this task only are marked `*` (where any other value comes from is `herdr-projects show <id>`'s). `Ctrl+U` puts the selected row back to what it would be without this task's own answer. `Esc` or `Ctrl+E` again goes back ([settings.md](settings.md)). On an automation's row: the automation's own settings, the same page |
+| `Ctrl+E` `Ctrl+U` | the selected task's settings, full screen: every work setting by its name and its value. `↑` `↓` move to a row; `Enter` changes it (a switch or a choice goes to its next value, anything else is typed and saved with `Enter`); rows set for this task only are marked `*` (where any other value comes from is `herdr-projects show <id>`'s). `Ctrl+U` puts the selected row back to what it would be without this task's own answer. `Esc` or `Ctrl+E` again goes back ([settings.md](settings.md)). On an automation's row: the automation's own settings, the same page. On this machine's heading: your own settings, which every task starts from, the same page (on a repo's heading: your entry for that repo), changed as `herdr-projects set` changes them |
 | `Ctrl+Z` | undo: bring back a draft that was put away, or take the last archiving back |
 | `Ctrl+F` | find: type, and the list shows only the tasks that match, archived ones too. `Enter` keeps the filter, `Esc` leaves find; `Esc` on the list clears a filter that is kept |
 | `Ctrl+K` | only while a remote view holds the board's terminal at another size than herdr shows it (the line at the top says so): end that view, so the board has its own size again ([board-size.md](board-size.md)) |
 | `Ctrl+C` | twice: close the board, with text typed too: the draft is kept and is back when the board reopens |
+| `Ctrl+T` | a voice call with whoever the chat talks to: a live conversation with the board's voice agent, which sends what you ask for to the Coordinator, the task's agent or a coordinator, and reads their answers back in short. The call follows the chat: `Space` and moving between tasks change who it talks to. The microphone and the speaker are the computer you sit at: its call helper holds the call there, in the terminal's computer, with no browser. The key again hangs up. More: [voice calls](voice.md) |
 
 **`Alt`: only shows or hides**
 

@@ -35,15 +35,28 @@ pub struct Away { pub text: String, pub to: String, pub cwd: String, pub warned:
 /// What the archive view put aside, to come back to.
 #[derive(Clone, Debug, Default)]
 pub struct Back { pub sel: String, pub top: usize, pub filter: String, pub mode: Option<Mode>, pub value: String }
-/// The settings page: whose (a task, or an automation's row), the picked row, and the setting being typed for.
+/// Whose settings the page shows: a task's, an automation's, yours (what every task starts from, as `set` changes
+/// them), or your entry for a repo (`set --repo`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Whose { #[default] Task, Auto, You, Repo(String) }
+impl Whose {
+    /// Yours or your entry for a repo: no task's or automation's.
+    pub fn mine(&self) -> bool { matches!(self, Whose::You | Whose::Repo(_)) }
+    /// The repo of your entry for a repo ("" for every other).
+    pub fn repo(&self) -> &str { if let Whose::Repo(r) = self { r } else { "" } }
+}
+/// The settings page: whose (a task, an automation's row, or a heading for yours), the picked row, and the setting
+/// being typed for.
 #[derive(Clone, Debug, Default)]
-pub struct Editing { pub id: String, pub at: usize, pub typing: String, pub auto: bool }
+pub struct Editing { pub id: String, pub at: usize, pub typing: String, pub whose: Whose }
 /// The first run's one screen.
 #[derive(Clone, Debug, Default)]
 pub struct Setup { pub file: String, pub typing: bool, pub key: Option<(bool, String, String)>, pub sidebar: Option<bool> }
-/// What you sent a task's agent, until it says something new.
+/// What you sent a task's agent or a coordinator, from the moment you sent it until its own conversation shows it or it
+/// says something new: `over` what it had said then, `at` when; `before` the words sent it just before these, maybe still
+/// on their way to another machine.
 #[derive(Clone, Debug, Default)]
-pub struct Sent { pub text: String, pub over: (String, Value, Value) }
+pub struct Sent { pub text: String, pub over: (String, Value, Value), pub at: i64, pub before: Vec<String> }
 /// A chat message longer than its box: where you scrolled to, in which chat (`key`). Opened (`top`), it stays open while
 /// its conversation changes: `lines` its lines as last drawn, to find the place again, `end` whether it showed the end.
 #[derive(Clone, Debug, Default)]
@@ -53,11 +66,11 @@ pub struct ChatFit { pub total: usize, pub rows: usize, pub top: usize, pub abov
 /// One row of the folded list: a heading, a task, a note ("↓ 3 more done"), or an automation. A heading is a machine's
 /// (`machine`, with every machine shown) or a group's (a repo, a status, a machine's automations: `autos`), selectable
 /// by its `id` (update/heads.rs). `folded` holds how many rows it hides, tasks and automations (0: open), `folded_autos`
-/// how many of those are automations. `empty`: a machine's with nothing in view, which shows folded (`0 tasks`).
+/// how many of those are automations. `empty`: a machine's with nothing in view, or a repo's used lately with no task in view, which shows folded (`0 tasks`).
 #[derive(Clone, Debug)]
 pub enum Row { Head { name: String, autos: bool, id: String, machine: bool, folded: usize, folded_autos: usize, empty: bool }, Rec(Rec), Note(String), Auto(Obj) }
 impl Row {
-    /// A heading that shows folded: one that hides rows, or an empty machine's.
+    /// A heading that shows folded: one that hides rows, or an empty machine's or repo's.
     pub fn shut(&self) -> bool { matches!(self, Row::Head { folded, empty, .. } if *folded > 0 || *empty) }
 }
 /// The selection's row in the list as last laid out, to keep the selection steady when rows move: `group` is the
@@ -87,8 +100,9 @@ pub struct State {
     pub data: Data,
     pub remotes: BTreeMap<String, Remote>,
     /// The machines ("" this one) in the order of herdr's sidebar (remote/sidebar.rs), the other machine whose sidebar
-    /// was followed last (kept with the view), and herdr's own list here (None: named by hand in board.machines).
-    pub order: Vec<String>, pub sidebar_from: Option<String>, pub own_order: Option<Vec<String>>,
+    /// was followed last (kept with the view), and herdr's own list here (None: named by hand in board.machines); the
+    /// name that sidebar shows each machine by (none for one it does not show).
+    pub order: Vec<String>, pub sidebar_from: Option<String>, pub own_order: Option<Vec<String>>, pub sidebar_names: BTreeMap<String, String>,
     /// The tasks of whoever's board shows, as rows (shown/states.rs: as_row), and what the list makes of them.
     pub items: Vec<Rec>, pub rows: Vec<Row>, pub grouped: Vec<(String, Vec<Rec>)>, pub whole: bool, pub autos: Vec<Obj>, pub jobs: Vec<Obj>, pub steps: Vec<String>,
     pub selection_rows: Vec<SelRow>, pub selection_layout: String,
@@ -134,11 +148,14 @@ pub struct State {
     pub now: i64, pub ticks: u64,
     /// The tasks as last told to the terminal (OSC 7501), by id.
     pub osc_sent: HashMap<String, String>,
+    /// A call this board rang: its id and when (update/call.rs); the last switch asked by voice that this board made,
+    /// and on which call (each call counts its switches from one).
+    pub call_link: Option<(String, i64)>, pub call_switch: (String, i64),
 }
 impl State {
     pub fn new(ctx: Ctx, data: Data) -> State {
         State {
-            ctx, web: Web::default(), data, remotes: BTreeMap::new(), order: vec![], sidebar_from: None, own_order: None, items: vec![], rows: vec![], grouped: vec![], whole: false, autos: vec![], jobs: vec![], steps: vec![],
+            ctx, web: Web::default(), data, remotes: BTreeMap::new(), order: vec![], sidebar_from: None, own_order: None, sidebar_names: BTreeMap::new(), items: vec![], rows: vec![], grouped: vec![], whole: false, autos: vec![], jobs: vec![], steps: vec![],
             selection_rows: vec![], selection_layout: String::new(), sel: String::new(), top: 0, stick: String::new(), top_free: false,
             all_done: false, archive_view: false, archive_back: None, archive_undo: None, reply: false, reply_id: String::new(),
             side: false, full: false, panel_top: 0, panel_height: 1, panel_length: 0, width: 120,
@@ -147,7 +164,7 @@ impl State {
             input: TextBox::default(), editing: None, edit_line: 0, setup: None, paste_text: String::new(), paste_at: 0, paste_more: 0, paste_room: 1, closing: None, leaving: false, leave_at: 0,
             attempt_at: HashMap::new(), pending: HashMap::new(), list_room: 0, list_tall: false, list_width: 0, fold_sel: String::new(), unread_top: 0, unread_max: 0, list_at: None, list_ids: vec![],
             told: 0, rang: 0, err_hid: String::new(), told_reply: String::new(), lone_at: 0, prefixed: 0, stale: String::new(), left: String::new(),
-            held: None, guest: false, viewed: false, off_note: String::new(), size: Default::default(), chat_key_shown: false, web_ui_asked: false, tags_gone: false, now: crate::clock::now(), ticks: 0, osc_sent: HashMap::new(),
+            held: None, guest: false, viewed: false, off_note: String::new(), size: Default::default(), chat_key_shown: false, web_ui_asked: false, tags_gone: false, now: crate::clock::now(), ticks: 0, osc_sent: HashMap::new(), call_link: None, call_switch: (String::new(), 0),
         }
     }
     /// The selected task, when a task is selected.

@@ -18,7 +18,7 @@ use std::cell::Cell;
 /// The groups, in the order the ? menu and docs/keys.md show them.
 pub const GROUPS: [(&str, &str); 3] = [("plain", "plain keys"), ("ctrl", "ctrl: does something"), ("alt", "alt: only shows or hides")];
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum K { Up, Down, PageUp, PageDown, Enter, Newline, Talk, Delegate, Back, Menu, SayYes, SayNo, Yes, SendBack, NextAttempt, Stop, Archive, Pin, Settings, PutBack, Undo, Find, Free, Close, ChatMessage, ChatScrollUp, ChatScrollDown, Side, Panel, ArchiveView, ByRepo, AllDone, Scope }
+pub enum K { Up, Down, PageUp, PageDown, Enter, Newline, Talk, Delegate, Back, Menu, SayYes, SayNo, Yes, SendBack, NextAttempt, Stop, Archive, Pin, Settings, PutBack, Undo, Find, Free, Close, Call, ChatMessage, ChatScrollUp, ChatScrollDown, Side, Panel, ArchiveView, ByRepo, AllDone, Scope }
 pub struct Key {
     pub id: K, pub name: &'static str, pub keys: &'static [&'static str], pub raw: &'static [&'static str], pub show: Option<&'static str>, pub gap: Option<&'static str>,
     pub group: Option<&'static str>, pub with: Option<&'static str>, pub fixed: bool, pub draft: bool, pub web: Option<&'static str>, pub help: Option<&'static str>,
@@ -62,7 +62,7 @@ pub static KEYS: &[Key] = &[
     Key { id: K::Pin, name: "pin", keys: &["ctrl+p"], raw: &[], show: None, gap: None, group: Some("ctrl"), with: None, fixed: false, draft: false, web: Some("Pin"), help: None, hint: None,
         doc: Some("pin the selected task to the top, or unpin it") },
     Key { id: K::Settings, name: "settings", keys: &["ctrl+e"], raw: &[], show: None, gap: None, group: Some("ctrl"), with: None, fixed: false, draft: false, web: Some("Settings"), help: None, hint: None,
-        doc: Some("the selected task's settings, full screen: every work setting by its name and its value. {up} {down} move to a row; {enter} changes it (a switch or a choice goes to its next value, anything else is typed and saved with {enter}); rows set for this task only are marked `*` (where any other value comes from is `herdr-projects show <id>`'s). {putBack} puts the selected row back to what it would be without this task's own answer. {back} or {settings} again goes back ([settings.md](settings.md)). On an automation's row: the automation's own settings, the same page") },
+        doc: Some("the selected task's settings, full screen: every work setting by its name and its value. {up} {down} move to a row; {enter} changes it (a switch or a choice goes to its next value, anything else is typed and saved with {enter}); rows set for this task only are marked `*` (where any other value comes from is `herdr-projects show <id>`'s). {putBack} puts the selected row back to what it would be without this task's own answer. {back} or {settings} again goes back ([settings.md](settings.md)). On an automation's row: the automation's own settings, the same page. On this machine's heading: your own settings, which every task starts from, the same page (on a repo's heading: your entry for that repo), changed as `herdr-projects set` changes them") },
     Key { id: K::PutBack, name: "putBack", keys: &["ctrl+u"], raw: &[], show: None, gap: None, group: None, with: Some("settings"), fixed: false, draft: false, web: None, help: None, hint: None,
         doc: None },
     Key { id: K::Undo, name: "undo", keys: &["ctrl+z"], raw: &[], show: None, gap: None, group: Some("ctrl"), with: None, fixed: false, draft: false, web: Some("Undo"), help: None, hint: None,
@@ -73,6 +73,8 @@ pub static KEYS: &[Key] = &[
         doc: Some("only while a remote view holds the board's terminal at another size than herdr shows it (the line at the top says so): end that view, so the board has its own size again ([board-size.md](board-size.md))") },
     Key { id: K::Close, name: "close", keys: &["ctrl+c"], raw: &[], show: None, gap: None, group: Some("ctrl"), with: None, fixed: false, draft: false, web: None, help: None, hint: None,
         doc: Some("twice: close the board, with text typed too: the draft is kept and is back when the board reopens") },
+    Key { id: K::Call, name: "call", keys: &["ctrl+t"], raw: &[], show: None, gap: None, group: Some("ctrl"), with: None, fixed: false, draft: false, web: None, help: Some("a voice call with whoever the chat talks to; again: hang up"), hint: None,
+        doc: Some("a voice call with whoever the chat talks to: a live conversation with the board's voice agent, which sends what you ask for to the Coordinator, the task's agent or a coordinator, and reads their answers back in short. The call follows the chat: {talk} and moving between tasks change who it talks to. The microphone and the speaker are the computer you sit at: its call helper holds the call there, in the terminal's computer, with no browser. The key again hangs up. More: [voice calls](voice.md)") },
     Key { id: K::ChatMessage, name: "chatMessage", keys: &["alt+c"], raw: &[], show: None, gap: None, group: Some("alt"), with: None, fixed: false, draft: false, web: None, help: None, hint: None,
         doc: Some("the chat's latest message, the Coordinator's or a task agent's. The one key for it, both ways") },
     Key { id: K::ChatScrollUp, name: "chatScrollUp", keys: &["alt+k"], raw: &[], show: None, gap: None, group: Some("alt"), with: None, fixed: false, draft: true, web: None, help: None, hint: None,

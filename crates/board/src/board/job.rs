@@ -29,8 +29,8 @@ pub enum Job {
     /// One of the exact actions, on a task or an automation of another machine.
     Far { machine: crate::remote::Machine, host: String, action: String, req: Value, quiet: bool },
     AutoTurn { id: String, on: bool }, AutoFire { id: String }, AutoRemove { id: String, name: String },
-    /// A setting of a task (or an automation, `auto`): a value, or none to put it back.
-    Set { id: String, name: String, value: Option<String>, auto: bool },
+    /// A setting of a task, an automation, yours or your entry for a repo (`whose`): a value, or none to put it back.
+    Set { id: String, name: String, value: Option<String>, whose: super::state::Whose },
     CoordSeen { unseen: String, to: String },
     /// You left the chat with a task whose chat changed its code: its review need not wait the quiet time.
     ChatLeft { id: String },
@@ -44,6 +44,8 @@ pub enum Job {
     WebOpen { id: String, far: Option<(crate::remote::Machine, String, String, String)> },
     /// The herdr web UI's link through the board's front door, or left alone for good.
     WebUiLink, WebUiDecline,
+    /// A voice call for whoever the chat talks to (calls/ring.rs), hanging it up, and who it talks to now.
+    CallRing { owner: String, target: crate::voice::call::Target, session: String }, CallEnd, CallTarget { target: crate::voice::call::Target },
     Nothing,
 }
 impl Job {
@@ -69,8 +71,6 @@ impl Job {
 pub enum Then {
     /// Select this task (one that was just added).
     Sel(String),
-    /// What was sent to a task's agent: it stands in the box until the agent says something new.
-    NoteSent { id: String, text: String },
     /// A task was archived: the undo key brings it back.
     Archived(String),
     /// A task left the list (archived, or restored out of the archive): the message says where the selection went.
@@ -98,6 +98,8 @@ pub enum Then {
     /// A setting typed on the settings page was taken: the box it was typed in is emptied. A refused one stays there
     /// to be put right.
     Saved(String),
+    /// A call rang: its id, for the chat to say when no helper took it, or why it ended before it began.
+    CallRang { id: String },
 }
 /// `about`: the row the job acted on (Job::about), `kind` which job it was (Job::kind); `seen`: how many reads of the tasks had started when it ended, so the
 /// board knows which read shows what it did (update/pending.rs).
@@ -118,6 +120,7 @@ pub fn run(job: Job) -> Done {
         Job::CoordSend { text, about, .. } => Some((text.clone(), about.clone())),
         Job::Add { text, .. } => Some((text.clone(), String::new())),
         Job::Describe { id, text } => Some((text.clone(), id.clone())),
+        Job::Far { host, action, req, .. } if action == "tell" => Some((req.t("text"), format!("{host}:{}", req.s("id")))),
         _ => None,
     };
     let (about, kind) = (job.about(), job.kind());
@@ -133,7 +136,7 @@ fn run_one(job: Job) -> Done {
             Job::Tell { id, text, fresh } => {
                 let out = talk::reply(&id, &text, crate::status_words::who::YOU)?;
                 let ink = if out.msg.starts_with("queued") { Ink::Yellow } else { Ink::Green };
-                let mut d = Done::say(out.msg.clone(), ink).and(Then::NoteSent { id, text });
+                let mut d = Done::say(out.msg.clone(), ink);
                 if !fresh && out.msg == "Sent to the agent" { d.flash = Some((out.msg, Ink::Plain)); } // plainly sent: the box shows your words (said only with the chat hidden)
                 d
             }
@@ -176,7 +179,7 @@ fn run_one(job: Job) -> Done {
             Job::AutoTurn { id, on } => { let (w, ink) = crate::automations::show::turned_words(&crate::automations::list::turn(&id, on)?); Done::say(w, ink) }
             Job::AutoFire { id } => { let a = crate::automations::list::find(&id)?; let f = crate::automations::fire::fire(&id, crate::automations::told::Cause::Run, crate::clock::now())?; let (w, ink) = crate::automations::show::fired_words(&a, &f); Done::say(w, ink) }
             Job::AutoRemove { id, name } => { crate::automations::list::remove(&id)?; Done::say(format!("Removed the automation \"{name}\"."), Ink::Muted).and(Then::AutoGone) }
-            Job::Set { id, name, value, auto } => super::job_far::set(&id, &name, value, auto)?,
+            Job::Set { id, name, value, whose } => super::job_far::set(&id, &name, value, &whose)?,
             Job::CoordSeen { unseen, to } => { crate::coordinator::requests::seen(&unseen, crate::coordinator::co::Co::of(&crate::herdr::cli::current_socket(), &to)); Done::default() }
             Job::ChatLeft { id } => { crate::finish::chat::left(&id); Done::default() }
             Job::OpenAgent { id, popup } => super::job_far::open_agent(&id, popup),
@@ -189,6 +192,12 @@ fn run_one(job: Job) -> Done {
             Job::WebOpen { id, far } => super::job_far::web_open(&id, far),
             Job::WebUiLink => { let r = crate::webui::command::link_now(); Done::say(r.t("msg"), if r.b("ok") { Ink::Green } else { Ink::Red }) }
             Job::WebUiDecline => { crate::webui::command::decline(); Done::say("Left as it is. `herdr-projects web-ui link` does it later.", Ink::Muted) }
+            Job::CallRing { owner, target, session } => match crate::calls::ring::ring(&owner, &target, &session) {
+                Ok(id) => Done::say(format!("Calling with {}…", target.name), Ink::Muted).and(Then::CallRang { id }),
+                Err(e) => Done::fail(e),
+            },
+            Job::CallEnd => { crate::voice::call::end("hung up on the terminal board"); Done::say("Hung up.", Ink::Muted) }
+            Job::CallTarget { target } => { crate::voice::call::set_target(&target); Done::default() }
             Job::Nothing => Done::default(),
         })
     })();

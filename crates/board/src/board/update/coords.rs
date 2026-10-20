@@ -15,12 +15,25 @@ use crate::shown::ink::Ink;
 pub struct Target { pub host: String, pub to: String, pub name: String }
 /// A machine's heading's colour, which its machine coordinator takes too: the theme's accent.
 pub const MACHINE_INK: Ink = Ink::Accent;
-/// A repo's heading's colour (grouped by repo), which its project coordinator takes too: the brighter grey.
+/// A repo's project coordinator's colour: the brighter grey. Its heading is not (REPO_HEAD_INK), so the three
+/// coordinators stay three colours.
 pub const REPO_INK: Ink = Ink::Soft;
+/// A repo's heading's name (grouped by repo): the plain text colour, bold, as loud as the task titles under it.
+pub const REPO_HEAD_INK: Ink = Ink::Plain;
 impl Target {
-    /// Its heading's colour: on the chat's frame, its name and its labels, and its name in the hints. The top-level
-    /// Coordinator has none of its own (plain text).
+    /// Its colour: on the chat's frame, its name and its labels, and its name in the hints. A machine's coordinator has
+    /// its heading's accent, a repo's the brighter grey. The top-level Coordinator has none of its own (plain text).
     pub fn ink(&self) -> Ink { if self.to == "machine" { MACHINE_INK } else { REPO_INK } }
+    /// What the chat keeps your words to it under (update/chat.rs), beside the tasks' ids.
+    pub fn key(&self) -> String { format!("co:{}\t{}", self.host, self.to) }
+}
+/// The Coordinator of the machine whose board shows, as a target: its top-level one (`to` empty).
+pub fn far_top(s: &State) -> Option<Target> { s.remotes.contains_key(&s.scope).then(|| Target { host: s.scope.clone(), to: String::new(), name: format!("Coordinator on {}", s.scope) }) }
+/// That coordinator as the board read it last: this machine's, or what its machine sent with its tasks.
+pub fn look_of(s: &State, t: &Target) -> Option<crate::coordinator::look::Look> {
+    if t.host.is_empty() { return s.data.sub.as_ref().filter(|x| x.0 == t.to).map(|x| x.1.clone()); }
+    let m = s.remotes.get(&t.host)?;
+    crate::coordinator::far::read(if t.to.is_empty() { &m.coord } else { m.coords.at(&t.to) })
 }
 /// The coordinator a heading stands for: a machine's heading, or a repo's. A status group's has none.
 pub fn of_head(s: &State, id: &str) -> Option<Target> {
@@ -55,6 +68,7 @@ pub fn send(s: &mut State, t: &Target, text: &str, delegate: bool, fx: &mut Vec<
         let Some(m) = s.remotes.get(&t.host).map(|m| m.machine.clone()) else { return s.flash(format!("{} is not on this board any more. Nothing was sent.", t.host), Ink::Yellow) };
         fx.push(Effect::Run(Job::Dispatch { machine: m, text: text.into(), delegate, about: String::new(), to: t.to.clone() }));
     }
+    super::chat::note_coord(s, t, text);
     s.input.set_text("");
     fx.push(Effect::Load);
 }

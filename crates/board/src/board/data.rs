@@ -9,7 +9,7 @@ use crate::flow::{live::board, talk::task_talk, task::is_agent_task};
 use crate::herdr::cli::{current_socket, session_name};
 use crate::json::*;
 use crate::shown::states::as_row;
-use crate::store::{automations::automations, inbox::{clear_dispatch, dispatches}, keys::{repo_keys, Keys}, marks::tilde, repos::{branch_of, can_worktree, folder_of, known_repos, repo_of}, settings::{lookup::{in_repo, setting, Scope}, show::{problems, rows}}};
+use crate::store::{automations::automations, inbox::{clear_dispatch, dispatches}, keys::{repo_keys, Keys}, marks::tilde, repos::{branch_of, can_worktree, folder_of, known_repos, repo_of}, settings::{lookup::{in_repo, setting, Scope}, show::{problems, problems_in, rows}}};
 use std::collections::BTreeMap;
 
 /// Another machine, as the board knows it: its tasks as rows, its automations, its Coordinator as it sent it
@@ -31,19 +31,26 @@ pub struct Data {
     /// "project:<repo>"), how it stands, and its screen (update/coords.rs).
     pub sub: Option<(String, Look, String)>,
     pub keys: Keys, pub repos: Vec<String>, pub roots: BTreeMap<String, String>, pub session: String, pub notify: String,
+    /// The known repos that keep their heading by repo with no task in view (`used_lately`).
+    pub lately: Vec<String>,
     /// The repo the board is in (where it was opened, or where a draft was typed), its folder, and the tasks' file.
     pub repo: String, pub repo_root: String,
     /// This machine's name, for its heading on the board of every machine.
     pub host: String,
     /// herdr's approve action asked this board to ask about a task; a line the board key left for this board.
     pub approve: String, pub heard: Option<(String, String)>,
+    /// The voice call of this machine, when one is on (voice/call.rs); else the last one, ended (its id and why).
+    pub call: Option<Obj>, pub call_ended: Option<(String, String)>,
+    /// Your settings ("") or your entry for a repo, while the settings page shows them: which, and its rows and problems.
+    pub mine: Option<(String, Value)>,
     pub loaded: bool,
     /// Which read this is (`reads_started`), counted from the program's start.
     pub seq: u64,
 }
-/// What the board wants a closer look at.
+/// What the board wants a closer look at. `mine`: your settings (`Some("")`) or your entry for a repo, for the
+/// settings page.
 #[derive(Clone, Debug, Default)]
-pub struct Wants { pub ids: Vec<String>, pub cwd: String, pub own_pane: String, pub web: bool, pub coord: String }
+pub struct Wants { pub ids: Vec<String>, pub cwd: String, pub own_pane: String, pub web: bool, pub coord: String, pub mine: Option<String> }
 
 /// The repo the board is in, worked out once for each folder: a busy lock keeps what was known.
 pub fn repo_here(cwd: &str) -> (String, String) {
@@ -64,8 +71,10 @@ pub fn load(wants: &Wants) -> Data {
     let socket = current_socket();
     let mut items: Vec<Obj> = board(true).iter().map(as_row).collect();
     for r in items.iter_mut() { if wants.ids.iter().any(|w| w == r.s("id")) { let s = snap(r); r.put("snap", s); } }
-    let items = items.into_iter().map(std::sync::Arc::new).collect();
     let now = crate::clock::now();
+    let roots: BTreeMap<String, String> = known_repos().iter().map(|(k, v)| (k.clone(), text(v))).collect();
+    let lately = used_lately(&items, &roots, &socket, now);
+    let items = items.into_iter().map(std::sync::Arc::new).collect();
     let autos: Vec<Obj> = automations().into_iter().map(|a| shown_auto(a, now)).collect();
     let jobs: Vec<Obj> = dispatches();
     // A finished instruction is forgotten without a word: its row goes, and what it did is on the board.
@@ -75,14 +84,28 @@ pub fn load(wants: &Wants) -> Data {
     let coord_screen = if !coord.readable && coord.status.is_some() { screen_text(&screen(&coord, &socket)) } else { String::new() };
     let sub = (!wants.coord.is_empty()).then(|| { let co = crate::coordinator::co::Co::of(&socket, &wants.coord); let v = look(&co); let sc = if !v.readable && v.status.is_some() { screen_text(&screen(&v, &co)) } else { String::new() }; (wants.coord.clone(), v, sc) });
     let here = repo_here(&wants.cwd);
-    let roots: BTreeMap<String, String> = known_repos().iter().map(|(k, v)| (k.clone(), text(v))).collect();
     Data {
-        items, autos, jobs, coord, coord_screen, sub, can_dispatch: crate::coordinator::who::ready(&socket), keys: repo_keys(), repos: roots.keys().cloned().collect(), roots,
+        items, autos, jobs, coord, coord_screen, sub, can_dispatch: crate::coordinator::who::ready(&socket), keys: repo_keys(), repos: roots.keys().cloned().collect(), roots, lately,
         session: session_name(&socket), notify: setting("board.notify", None).as_str().unwrap_or("").to_string(),
         repo: here.0, repo_root: here.1, host: crate::remote::check::hostname(),
         // herdr's approve action and a line left by the board key are for a board in a terminal, never the web board.
-        approve: if wants.web { String::new() } else { crate::actions::finish_line::take_approve(&socket, &wants.own_pane) }, heard: if wants.web { None } else { crate::board::run::say::heard(&wants.own_pane, &socket) }, loaded: true, seq,
+        approve: if wants.web { String::new() } else { crate::actions::finish_line::take_approve(&socket, &wants.own_pane) }, heard: if wants.web { None } else { crate::board::run::say::heard(&wants.own_pane, &socket) }, call: crate::voice::call::get(), call_ended: crate::voice::call::last().filter(|c| c.s("state") == "ended").map(|c| (c.t("id"), c.t("why"))),
+        mine: wants.mine.as_ref().map(|r| (r.clone(), mine(r))), loaded: true, seq,
     }
+}
+/// How long a repo with no task in view keeps its heading by repo after its last use.
+pub const LATELY_DAYS: i64 = 14;
+/// The known repos of this machine whose heading by repo shows even with no task in view, so that space there still
+/// talks to its project coordinator: those whose folder is still there, and that have a project coordinator (running
+/// or saved), or a task (archived ones too) that changed in the last `LATELY_DAYS`. The many old ones a machine
+/// collects stay off the list.
+pub fn used_lately(items: &[Obj], roots: &BTreeMap<String, String>, socket: &str, now: i64) -> Vec<String> {
+    let since = now - LATELY_DAYS * 24 * 3600 * 1000;
+    let coordinated: Vec<String> = crate::coordinator::state::all(socket).iter().filter_map(|c| c.repo().map(String::from)).collect();
+    let used = |t: &Obj| ["at", "since", "created", "archivedAt"].iter().map(|k| t.i(k)).max().unwrap_or(0) >= since;
+    roots.iter().filter(|(name, folder)| std::path::Path::new(folder.as_str()).is_dir()
+        && (coordinated.contains(name) || items.iter().any(|t| t.s("id").split('/').next() == Some(name.as_str()) && used(t))))
+        .map(|(name, _)| name.clone()).collect()
 }
 /// An automation with what its row and its panel show, read here: its firings, newest first, its own settings, every
 /// work setting its next task will have, whether its tasks are research only.
@@ -97,6 +120,12 @@ pub fn shown_auto(a: Obj, now: i64) -> Obj {
         "settings": rows.iter().map(|x| x.json()).collect::<Vec<_>>() }));
     o.put("rowNow", serde_json::to_value(row_of(&a, now, Some(&oldest_first))).unwrap_or(Value::Null));
     o
+}
+/// Your settings (`repo` "") or your entry for a repo, as `show` and `show --repo` read them: every row, and what is
+/// not counted.
+pub fn mine(repo: &str) -> Value {
+    let scope = if repo.is_empty() { Scope::you() } else { Scope::repo(repo) };
+    json!({ "settings": rows(&scope).iter().map(|r| r.json()).collect::<Vec<_>>(), "problems": problems_in(&scope) })
 }
 /// A closer look at one task of this machine.
 pub fn snap(t: &Obj) -> Value {

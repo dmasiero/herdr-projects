@@ -7,6 +7,7 @@ pub mod chat;
 pub mod follow_up;
 pub mod check_again;
 pub mod check_run;
+pub mod commit;
 pub mod hand_over;
 pub mod line;
 pub mod model_refused;

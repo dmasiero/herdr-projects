@@ -1,18 +1,25 @@
 //! The longer jobs of the board: what goes to another machine (an action on its task, words for its Coordinator),
 //! a setting changed from the settings page, going into an agent's pane, and the first run's answers.
 use super::job::{Done, Then};
+use super::state::Whose;
 use crate::board::keys::key_name;
 use crate::herdr::Herdr;
 use crate::json::*;
-use crate::remote::{ask, attach_command, why::unanswered, Machine};
+use crate::remote::{ask, attach_command, carry::{carry, For}, why::unanswered, Machine};
 use crate::shown::ink::Ink;
 use crate::store::{inbox::{clear_dispatch, get_dispatch, new_dispatch, set_dispatch}, settings::{change::{set_value, unset_value}, lookup::{to_send, Scope}, show::rows, values::say}, settings_list::entry_of, tasks::{find, get}};
 
 /// Words for another machine's Coordinator (`to`: "" its top-level one, else its machine or a repo's coordinator), as a
-/// row of this board until that machine has taken them.
+/// row of this board until that machine has taken them. A file of this machine they name goes first (remote/carry.rs);
+/// one that cannot stops them, and the row says why.
 pub fn dispatch(m: Machine, text: String, delegate: bool, about: String, to: String) -> Done {
     let job = match new_dispatch(&format!("@{} {text}", m.label), obj(json!({ "remote": m.label }))) { Ok(j) => j, Err(e) => return Done::fail(e.msg) };
     let id = job.t("id");
+    let text = match carry(&m, &text, &For::Coordinator(to.clone())) {
+        Ok(t) => t,
+        Err(e) => { if get_dispatch(&id).is_some() { set_dispatch(&id, obj(json!({ "state": "error", "msg": format!("{e} Nothing was sent.") }))); } return Done::default(); }
+    };
+    if get_dispatch(&id).is_none() { return Done::default(); } // stopped while its files went
     let mut req = obj(json!({ "text": text, "delegate": delegate, "settings": to_send("", &crate::store::settings::places::yours()), "from": crate::remote::check::hostname() }));
     if !about.is_empty() { req.put("about", about); }
     if !to.is_empty() { req.put("to", to); }
@@ -30,6 +37,10 @@ pub fn far(m: &Machine, host: &str, action: &str, req: Value, quiet: bool) -> Do
     req.put("action", action);
     // A task's work settings travel with whatever starts its agent: what this machine says for it is worked out here.
     if ["delegate", "tell"].contains(&action) { let repo = req.t("id").split('/').next().unwrap_or("").to_string(); req.put("settings", to_send(&repo, &crate::store::settings::places::yours())); req.put("from", crate::remote::check::hostname()); }
+    // Words for its agent take the files of this machine they name along first; one that cannot go stops them.
+    if action == "tell" {
+        match carry(m, &req.t("text"), &For::Task(req.t("id"))) { Ok(t) => req.put("text", t), Err(e) => return Done::fail(format!("{e} Nothing was sent.")) }
+    }
     let ms = if action == "reopen" { 60000 } else { 20000 };
     match ask(m, "do", Some(&Value::Object(req.clone())), ms) {
         Err(why) => Done::fail(unanswered(host, &why)),
@@ -52,10 +63,12 @@ pub fn far(m: &Machine, host: &str, action: &str, req: Value, quiet: bool) -> Do
         }
     }
 }
-/// A setting of one task (or automation) from the settings page: a value, or none to put the row back.
-pub fn set(id: &str, name: &str, value: Option<String>, auto: bool) -> crate::err::Res<Done> {
+/// A setting of one task (or automation) from the settings page: a value, or none to put the row back. Yours and your
+/// entry for a repo are changed as `set` and `set --repo` change them, with the same checks.
+pub fn set(id: &str, name: &str, value: Option<String>, whose: &Whose) -> crate::err::Res<Done> {
     use crate::automations::list as l;
-    let (value, from, later) = if auto {
+    if whose.mine() { return set_mine(name, value, whose.repo()); }
+    let (value, from, later) = if *whose == Whose::Auto {
         let r = match &value { Some(v) => l::set_setting(id, name, &json!(v))?, None => l::unset_setting(id, name)? };
         let r = r.ok_or_else(|| crate::err::Error::from("that setting is not an automation's"))?;
         (r.value, r.from, String::new())
@@ -69,6 +82,16 @@ pub fn set(id: &str, name: &str, value: Option<String>, auto: bool) -> crate::er
     let label = entry_of(name).map(|e| e.label.to_string()).unwrap_or_else(|| name.to_string());
     let shown = match &value { Value::Bool(true) => "on".to_string(), Value::Bool(false) => "off".to_string(), v => say(v).lines().next().unwrap_or("").to_string() };
     Ok(Done::say(format!("{}{}", crate::store::settings::show::saved_words(&label, &shown, &from), if later.is_empty() { String::new() } else { format!(" · {later}") }), Ink::Green).and(Then::Saved(name.to_string())))
+}
+fn set_mine(name: &str, value: Option<String>, repo: &str) -> crate::err::Res<Done> {
+    use crate::actions::settings::{settings_command, Where};
+    let cmd = if value.is_some() { "set" } else { "unset" };
+    let w = Where { task: None, repo: (!repo.is_empty()).then(|| repo.to_string()), automation: None };
+    let (j, _) = settings_command(cmd, &[cmd.to_string(), name.to_string()], &w, value.map(|v| json!(v)))?;
+    let label = entry_of(name).map(|e| e.label.to_string()).unwrap_or_else(|| name.to_string());
+    let shown = match j.at("value") { Value::Bool(true) => "on".to_string(), Value::Bool(false) => "off".to_string(), v => say(v).lines().next().unwrap_or("").to_string() };
+    let note = if j.s("note").is_empty() { String::new() } else { format!(" · {}", j.s("note")) };
+    Ok(Done::say(format!("{label}: {shown}{note}"), Ink::Green).and(Then::Saved(name.to_string())))
 }
 /// Into a task's agent: its real herdr pane. Its space may have been closed (archive closes it): it is reopened from
 /// the worktree first. Outside a herdr client (plain SSH) this terminal attaches to that one agent instead.

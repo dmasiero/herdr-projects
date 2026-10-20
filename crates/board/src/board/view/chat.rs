@@ -16,12 +16,18 @@ use crate::status_words::{coordinator_stands, coordinator_status, COORDINATOR_UN
 /// The fewest cells the status keeps when the progress stands beside it.
 const CHAT_STATUS_MIN: usize = 20;
 /// `tint`: the colour of what a machine's or a repo's coordinator belongs to, its heading's (update/coords.rs), on its
-/// name and on who said what; Plain for the Coordinator and a task's agent.
+/// name over the box (never inside it); Plain for the Coordinator and a task's agent.
 #[derive(Clone, Debug, Default)]
-pub struct Who { pub mark: Inked, pub tag: String, pub name: String, pub status: String, pub progress: Vec<Inked>, pub text: String, pub parts: Vec<Part>, pub mine: bool, pub raw: bool, pub said: bool, pub turn: String, pub note: String, pub always: bool, pub ink: Ink, pub tint: Ink }
-fn parts_text(parts: &[Part]) -> String { parts.iter().map(|p| format!("{}{}", if p.by.is_empty() { String::new() } else { format!("{}:\n", p.by) }, p.text)).collect::<Vec<_>>().join("\n\n") }
-/// Who the chat talks to now, as the chat draws it. None in find.
+/// `call`: the lines a voice call on now adds under the line that says who (chat_call.rs).
+pub struct Who { pub mark: Inked, pub tag: String, pub name: String, pub status: String, pub progress: Vec<Inked>, pub text: String, pub parts: Vec<Part>, pub mine: bool, pub raw: bool, pub said: bool, pub turn: String, pub note: String, pub always: bool, pub ink: Ink, pub tint: Ink, pub call: Vec<Inked> }
+pub fn parts_text(parts: &[Part]) -> String { parts.iter().map(|p| format!("{}{}", if p.by.is_empty() { String::new() } else { format!("{}:\n", p.by) }, p.text)).collect::<Vec<_>>().join("\n\n") }
+/// Who the chat talks to now, as the chat draws it, with a voice call on now. None in find.
 pub fn chat_of(s: &mut State, t: &Theme, r: Option<&Obj>) -> Option<Who> {
+    let mut w = who_of(s, t, r)?;
+    w.call = super::chat_call::lines(s);
+    Some(w)
+}
+fn who_of(s: &mut State, t: &Theme, r: Option<&Obj>) -> Option<Who> {
     same_chat(s);
     if s.mode == Mode::Find { return None; }
     if let Some(c) = crate::board::update::coords::talking(s) { return Some(super::coords::sub_who(s, t, &c)); }
@@ -76,13 +82,14 @@ pub fn coord_who(t: &Theme, v: &crate::coordinator::look::Look, screen: &str, fr
         turn: v.turn.as_ref().map(|x| x.id.clone()).unwrap_or_default(), ink: if err { Ink::Red } else { color }, ..Default::default() }
 }
 /// The Coordinator of the machine whose board shows: what that machine sent of it with its tasks (coordinator/far.rs).
-fn far_who(s: &State, t: &Theme, far: &str) -> Who {
-    let m = &s.remotes[far];
+fn far_who(s: &mut State, t: &Theme, far: &str) -> Who {
     let name = format!("Coordinator on {far}");
-    if let Some(v) = crate::coordinator::far::read(&m.coord) {
+    if let Some(v) = crate::coordinator::far::read(&s.remotes[far].coord) {
         let turn = v.talk.last().map(|x| x.text.clone()).unwrap_or_default();
-        return Who { name, turn, ..coord_who(t, &v, "", false) };
+        let target = crate::board::update::coords::Target { host: far.into(), to: String::new(), name: name.clone() };
+        return super::coords::with_sent(s, &target, &v, Who { name, turn, ..coord_who(t, &v, "", false) });
     }
+    let m = &s.remotes[far];
     // An older version there sends nothing of it; a machine with none adds what you type as a task.
     let old = m.ok && m.coord.is_null();
     let parts = if old { vec![Part { text: format!("{far} runs an older herdr-projects, which does not send what its Coordinator says: update it there."), note: "old".into(), ..Default::default() }] } else { vec![] };
@@ -126,6 +133,7 @@ pub fn chat_lines(c: Option<&Who>, width: usize, tight: bool) -> Vec<Inked> {
     let mut out = if tight { vec![] } else { vec![Inked::new()] };
     out.extend(chat_head(c, width, tight));
     if !c.note.is_empty() && !tight { out.push(Inked::plain("   ").add(Inked::of(crate::text::cut(&c.note, width.saturating_sub(3).max(1)), Ink::Muted))); }
+    out.extend(c.call.iter().take(if tight { 1 } else { 3 }).map(|l| l.cut(width.max(1))));
     out
 }
 /// Is the box open on the latest message? A start that failed says why, hidden or not.
@@ -134,7 +142,8 @@ pub fn chat_up(s: &State, c: Option<&Who>) -> bool { c.map(|c| s.chat_open || c.
 pub fn chat_message(s: &mut State, c: Option<&Who>, width: usize, max: usize) -> Vec<Inked> {
     let Some(c) = c.filter(|c| !c.text.is_empty()) else { return vec![] };
     if max < 1 { return vec![]; }
-    let paint = |by: bool, l: Inked, p: &Part| if by && c.tint != Ink::Plain { l.recolor(c.tint).bold() } else if by { l.recolor(Ink::Muted) } else if !p.tone.is_empty() { l.recolor(crate::board::update::beat::ink_of(&p.tone)) } else if p.mine { l } else { l.recolor(Ink::Soft) };
+    // Inside the box all looks as with the Coordinator, whoever it talks to: only its frame takes their colour.
+    let paint = |by: bool, l: Inked, p: &Part| if by { l.recolor(Ink::Muted) } else if !p.tone.is_empty() { l.recolor(crate::board::update::beat::ink_of(&p.tone)) } else if p.mine { l } else { l.recolor(Ink::Soft) };
     let (lines, starts) = super::chat_text::part_lines(&c.parts, width.max(1), &paint);
     // The newest thing said alone, whoever said it: the rest of the conversation is above it.
     let latest = starts.get(opens_at(&c.parts)).copied().unwrap_or(0);

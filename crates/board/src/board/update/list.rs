@@ -46,7 +46,7 @@ pub fn relist(s: &mut State) {
     let mine = &s.data.items;
     s.items = if s.scope.is_empty() { mine.clone() } else if s.scope == "*" { mine.iter().cloned().chain(super::remotes::others(s).into_iter().flat_map(|m| m.items.iter().cloned())).collect() } else { s.remotes.get(&s.scope).map(|m| m.items.clone()).unwrap_or_default() };
     super::pending::overlay(s);
-    s.jobs = if s.archive_view { vec![] } else { s.data.jobs.clone() };
+    s.jobs = if s.archive_view { vec![] } else { s.data.jobs.iter().filter(|j| !super::chat::in_chat(s, j)).cloned().collect() };
     let f = filter_now(s);
     s.autos = autos_shown(s, &f);
     super::pending::overlay_autos(s);
@@ -63,6 +63,8 @@ pub fn relist(s: &mut State) {
         let mut names: Vec<String> = vec![];
         for r in &shown { let g = repo_name(r).to_string(); if !names.contains(&g) { names.push(g); } }
         for a in &s.autos { let g = a.t("repo"); if !names.contains(&g) { names.push(g); } }
+        // A repo used lately with no task in view keeps its heading, for its project coordinator (heads.rs: empty_repo).
+        if s.scope.is_empty() || s.scope == "*" { for g in &s.data.lately { if super::heads::empty_repo(s, "", g) && !names.contains(g) { names.push(g.clone()); } } }
         let here = s.data.repo.clone();
         names.sort_by(|a, b| if *a == here { std::cmp::Ordering::Less } else if *b == here { std::cmp::Ordering::Greater } else { a.to_lowercase().cmp(&b.to_lowercase()).then(b.cmp(a)) });
         names.into_iter().map(|g| { let list = shown.iter().filter(|r| repo_name(r) == g).cloned().collect(); (g, list) }).collect()
@@ -127,7 +129,7 @@ pub fn relist(s: &mut State) {
     s.selection_rows = next;
     s.selection_layout = layout;
     // With no automation selected, nothing of one is open.
-    if s.auto().is_none() { s.auto_open = false; s.auto_at = -1; if s.editing.as_ref().map(|e| e.auto).unwrap_or(false) { s.editing = None; } }
+    if s.auto().is_none() { s.auto_open = false; s.auto_at = -1; if s.editing.as_ref().map(|e| e.whose == crate::board::state::Whose::Auto).unwrap_or(false) { s.editing = None; } }
     // A question is about what it names: when that changed underneath it, the question goes.
     if let Some(a) = &s.ask { if !super::ask::still_valid(s, &a.valid) { s.ask = None; s.flash(format!("It changed while you were asked, so nothing was merged. Look at it again, then {}.", key_name("yes")), Ink::Yellow); } }
     // A reply belongs to the task it was started for: when that task is gone, the words are put away, nothing is sent.
@@ -163,22 +165,27 @@ pub fn fold_rows(s: &mut State) -> Vec<Row> {
             let autos: Vec<Vec<Obj>> = p.groups.iter().map(|(name, _)| autos_in(s, &p.host, name)).collect();
             let n_autos: usize = autos.iter().map(|a| a.len()).sum();
             let n: usize = p.groups.iter().map(|(_, recs)| recs.len()).sum::<usize>() + n_autos;
+            let bare = |name: &str, recs: &[Rec], autos: &[Obj]| recs.is_empty() && autos.is_empty() && super::heads::empty_repo(s, &p.host, name);
+            let has_bare = p.groups.iter().zip(&autos).any(|((name, recs), a)| bare(name, recs, a));
             // A machine's heading, with every machine shown: folded, its one line stands for all its groups. One with
             // nothing in view shows folded (`0 tasks`), so that its machine coordinator is still a space away.
-            if p.heading && (n > 0 || super::heads::empty_shown(s)) {
+            if p.heading && (n > 0 || has_bare || super::heads::empty_shown(s)) {
                 let id = machine_id(&p.host);
-                let shut = super::heads::folded(s, &id);
-                rows.push(Row::Head { name: super::heads::label(s, &p.host), autos: false, id, machine: true, folded: if shut { n } else { 0 }, folded_autos: if shut { n_autos } else { 0 }, empty: n == 0 });
+                // Only empty repos' headings under it: nothing to fold.
+                let shut = super::heads::folded(s, &id) && n > 0;
+                rows.push(Row::Head { name: super::remotes::shown(s, &p.host), autos: false, id, machine: true, folded: if shut { n } else { 0 }, folded_autos: if shut { n_autos } else { 0 }, empty: n == 0 && !has_bare });
                 if shut { continue; }
             }
-            if n == 0 { continue; }
+            if n == 0 && !has_bare { continue; }
             for ((name, recs), autos) in p.groups.iter().zip(&autos) {
-                if recs.is_empty() && autos.is_empty() { continue; }
+                // A repo used lately with nothing in view: its heading alone, folded (`0 tasks`).
+                let empty = bare(name, recs, autos);
+                if recs.is_empty() && autos.is_empty() && !empty { continue; }
                 let id = group_id(s, &p.host, name);
-                let shut = super::heads::folded(s, &id);
+                let shut = super::heads::folded(s, &id) && !empty;
                 let own = !s.by_repo && name == AUTOMATIONS;
-                rows.push(Row::Head { name: name.clone(), autos: own, id, machine: false, folded: if shut { recs.len() + autos.len() } else { 0 }, folded_autos: if shut { autos.len() } else { 0 }, empty: false });
-                if shut { continue; }
+                rows.push(Row::Head { name: name.clone(), autos: own, id, machine: false, folded: if shut { recs.len() + autos.len() } else { 0 }, folded_autos: if shut { autos.len() } else { 0 }, empty });
+                if shut || empty { continue; }
                 let mut list = recs.clone();
                 list.sort_by(|a, b| (if s.by_repo { rank(a).cmp(&rank(b)) } else { std::cmp::Ordering::Equal })
                     .then_with(|| if a.b("archivedAt") && b.b("archivedAt") { b.i("archivedAt").cmp(&a.i("archivedAt")) } else { std::cmp::Ordering::Equal })

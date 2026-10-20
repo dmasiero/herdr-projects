@@ -4,6 +4,7 @@
 //! works nothing out.
 use super::super::ink::{first, pieces};
 use crate::board::state::{Row, State};
+use crate::board::update::coords::REPO_HEAD_INK;
 use crate::board::tags::{row_tag, tag_cells};
 use crate::board::theme::Theme;
 use crate::board::view::fields::{fields, mark, row_title};
@@ -63,7 +64,9 @@ pub fn list_of(s: &State, t: &Theme) -> Value {
             // A machine's heading stands over its groups: one with no rows, that a tap folds and unfolds as a group's. One with
             // nothing in view shows folded, `0 tasks`.
             Row::Head { name, id, machine: true, folded, folded_autos, empty, .. } => groups.push(obj(json!({ "name": name, "id": id, "machine": true, "folded": *folded > 0 || *empty, "count": if *empty { json!("0 tasks") } else { count(*folded, *folded_autos) }, "color": "accent", "repo": false, "rows": [], "more": 0 }))),
-            Row::Head { name, id, folded, folded_autos, .. } => groups.push(obj(json!({ "name": if s.by_repo { repo_label(name) } else { name.clone() }, "key": if s.by_repo { crate::board::tags::heading_key(s, at) } else { String::new() }, "id": id, "folded": *folded > 0, "count": count(*folded, *folded_autos), "color": if s.by_repo || !["needs you", "ready to approve", "working", "to do", "done"].contains(&name.as_str()) { "subtext0" } else { group_ink(name).name() }, "repo": s.by_repo, "rows": [], "more": 0 }))),
+            // A repo's heading in the plain text colour, as its task titles, its key dimmed. A repo used lately with no task in
+            // view shows folded too, `0 tasks`.
+            Row::Head { name, id, folded, folded_autos, empty, .. } => groups.push(obj(json!({ "name": if s.by_repo { repo_label(name) } else { name.clone() }, "key": if s.by_repo { crate::board::tags::heading_key(s, at) } else { String::new() }, "id": id, "folded": *folded > 0 || *empty, "count": if *empty { json!("0 tasks") } else { count(*folded, *folded_autos) }, "color": if s.by_repo { REPO_HEAD_INK.name() } else if !["needs you", "ready to approve", "working", "to do", "done"].contains(&name.as_str()) { "subtext0" } else { group_ink(name).name() }, "repo": s.by_repo, "rows": [], "more": 0 }))),
             Row::Auto(a) => push(&mut groups, auto_row_of(s, t, a, now)),
             Row::Rec(r) => push(&mut groups, row_of(s, t, r, now)),
             Row::Note(n) => if let Some(g) = groups.last_mut() { g.put("more", crate::re!(r"(\d+) more").captures(n).and_then(|c| c[1].parse::<i64>().ok()).unwrap_or(0)); },
@@ -90,7 +93,7 @@ pub fn list_of(s: &State, t: &Theme) -> Value {
             "where": if s.archive_view || s.data.repo_root == home { String::new() } else { s.data.repo.clone() },
             "whereKey": if s.archive_view || s.data.repo_root == home { String::new() } else { s.data.keys.get(&s.data.repo).cloned().unwrap_or_default() },
             "session": if s.data.session == "default" { String::new() } else { s.data.session.clone() },
-            "machines": if s.scope == "*" { let l: Vec<String> = crate::board::update::remotes::others(s).into_iter().map(|m| if m.ok { m.machine.label.clone() } else { format!("{} (no answer)", m.machine.label) }).collect(); if l.is_empty() { "no others found".to_string() } else { l.join(", ") } } else { String::new() },
+            "machines": if s.scope == "*" { let l: Vec<String> = crate::board::update::remotes::others(s).into_iter().map(|m| { let n = crate::board::update::remotes::shown(s, &m.machine.label); if m.ok { n } else { format!("{n} (no answer)") } }).collect(); if l.is_empty() { "no others found".to_string() } else { l.join(", ") } } else { String::new() },
             "only": if s.all() && s.scope != "*" { s.scope.clone() } else { String::new() }, "filter": s.filter, "host": crate::remote::check::hostname(), "version": crate::store::files::VERSION,
         },
         "groups": groups, "selected": s.sel,

@@ -13,7 +13,7 @@
   --sw-frame: var(--sw-text);
 }
 /* Who the box sends to, by its frame (view/textbox.js: boxColor): the Coordinator's is the plain text colour, an
-   agent's its task's status colour, a machine's or a repo's coordinator's its heading's colour (board.css: .sw-c-*). */
+   agent's its task's status colour, a machine's coordinator's its heading's accent, a repo's coordinator's the brighter grey (board.css: .sw-c-*). */
 .sw-card.sw-b-text { --sw-frame: var(--sw-text); } .sw-card.sw-b-red { --sw-frame: var(--sw-red); } .sw-card.sw-b-green { --sw-frame: var(--sw-green); } .sw-card.sw-b-yellow { --sw-frame: var(--sw-yellow); }
 .sw-card.sw-b-teal { --sw-frame: var(--sw-teal); } .sw-card.sw-b-review { --sw-frame: var(--sw-review); } .sw-card.sw-b-queue { --sw-frame: var(--sw-queue); } .sw-card.sw-b-check { --sw-frame: var(--sw-check); } .sw-card.sw-b-todo, .sw-card.sw-b-overlay0 { --sw-frame: var(--sw-todo); }
 .sw-card.sw-b-accent { --sw-frame: var(--accent, #f0a830); } .sw-card.sw-b-subtext0 { --sw-frame: var(--sw-dim); }
@@ -35,7 +35,7 @@
    scroll arrows: a thin bar of the web UI's, and only once the text is taller than the box). */
 .sw-input {
   grid-area: text; display: block; box-sizing: border-box; width: 100%; min-width: 0; margin: 0;
-  min-height: calc(1lh + var(--space-5, 20px)); max-height: 10lh; padding: var(--space-4, 16px) var(--space-5, 20px) var(--space-1, 4px);
+  min-height: calc(1lh + var(--space-5, 20px)); max-height: 10lh; max-height: min(10lh, var(--sw-room, 10lh)); padding: var(--space-4, 16px) var(--space-5, 20px) var(--space-1, 4px);
   resize: none; overflow-x: hidden; overflow-y: auto; overflow-wrap: anywhere; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: var(--border-strong, #3e3830) transparent;
   -webkit-appearance: none; -moz-appearance: none; appearance: none; background: transparent; border: 0; border-radius: 0; outline: 0; box-shadow: none; -webkit-tap-highlight-color: transparent;
   color: var(--text-strong, #f2ebdf); font-family: var(--font-ui, system-ui, sans-serif); font-weight: var(--fw-regular, 400); letter-spacing: normal;
@@ -48,7 +48,7 @@
 .sw-input::-webkit-scrollbar-thumb { background: var(--border-strong, #3e3830); border-radius: var(--radius-pill, 999px); }
 .sw-input::-webkit-scrollbar-button, .sw-input::-webkit-resizer, .sw-input::-webkit-scrollbar-corner { display: none; width: 0; height: 0; }
 .sw-input:focus, .sw-input:focus-visible { outline: 0; box-shadow: none; }
-.sw-input.is-sized { max-height: min(50vh, 480px); max-height: min(calc(var(--app-height, 100dvh) / 2), 480px); }
+.sw-input.is-sized { max-height: min(50vh, 480px); max-height: min(calc(var(--app-height, 100dvh) / 2), 480px, var(--sw-room, 480px)); }
 .sw-input::placeholder { color: var(--text-dim, #9b9183); opacity: 1; }
 .sw-input:disabled { opacity: 0.7; cursor: not-allowed; }
 
