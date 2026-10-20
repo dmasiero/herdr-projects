@@ -1,7 +1,10 @@
 # The web board's chat box
 
-**The box you type in at the foot of the [web board](web-ui.md) looks and works like the Herdr web UI's own chat
-input**, so going from the Board to an agent's chat and back feels like one program.
+**The board's own box looks and works like the Herdr web UI's own chat input**, so going from the Board to an agent's
+chat and back feels like one program. Most of the time the chat under the [web board](web-ui.md)'s list *is* the web
+UI's own chat, its box with it ([the web board's chat](web-chat.md)); this box is the one the board's own chat has
+where the web UI has none to show (a Coordinator not started yet, a task with no agent in its pane, another machine's
+Coordinator).
 
 It is not the web UI's code. The web UI's input is part of its bundled app, whose built files change with every
 release, so the Board loads nothing from them. It is the same thing built again in the Board's own page
@@ -48,10 +51,14 @@ Measured against **herdr-web-ui 0.4.8** (see [how](#how-it-was-measured)):
     agent reads it. Send waits while one is on its way.
   - The web UI's limits: 8 MB a file (a bigger one says so in a band over the box), three on their way at a time, and as
     many at once as its Settings → Chat → Files at once says.
-  - The file is kept where whoever gets the words can read it: in the Coordinator's own folder, in a task's working
-    folder under `.herdr-projects/files/` (git is told to leave it alone), or, with no Coordinator, in the board's own
-    folder (`files/` in its data folder).
-  - Only on this machine: a file for another machine's Coordinator or agent is refused, and the box says so.
+  - The file is kept where whoever gets the words can read it: in the Coordinator's own folder (a heading's
+    coordinator's, for words to it), in a task's working folder under `.herdr-projects/files/` (git is told to leave it
+    alone), or, with no Coordinator, in the board's own folder (`files/` in its data folder).
+  - For another machine's agent or Coordinator (a task of that machine, its heading, or its board shown) the file goes
+    to that machine, and the path is where it landed there. First the web UI's own way, as its chat box sends a file
+    for a pane on another PC: kept beside that agent's pane, in `.herdr-web-ui/` (a task's worktree leaves it out of
+    git too). Where the web UI cannot (no PC for that machine in it, not connected, or the agent has no pane yet) it
+    goes over the board's own link to that machine. If neither works the box says why, and nothing is attached.
 - **Dictation**, as in the web UI, with the mic beside the add button:
   - Tap it to start and tap again to finish, or hold it and let go (or hold ctrl+shift+space, cmd on a Mac).
   - While it listens, a pill over the box shows Cancel, where it stands (Ready, Recording, Transcribing, or No
@@ -67,8 +74,43 @@ Measured against **herdr-web-ui 0.4.8** (see [how](#how-it-was-measured)):
 - **Focus is the card's**, never a rectangle on the field inside it.
 - **No browser look** on the field in Chrome, Firefox or Safari: no frame, no focus ring, no inner shadow, no resize
   corner, no scroll arrows.
-- **Above a phone's keyboard**: the Board is as tall as the web UI's own shell, which follows the keyboard.
+- **Above a phone's keyboard**: the Board is as tall as the web UI's own shell, which follows the keyboard. What the
+  Board does there itself: [above a phone's keyboard](#above-a-phones-keyboard).
 - **Light, dark and every palette** of the web UI: they are its variables.
+
+## Above a phone's keyboard
+
+**While you type with a phone's keyboard up, the box stays whole above it and the line you type on stays in view**,
+however long the words get (`crates/web/src/webui/page/room.js`):
+
+- **The board's header, its chips and the list step aside**, as they do for the chat full screen: the chat has the
+  whole of what the keyboard leaves. The chat's bar, which says who gets your words, stays. When the keyboard goes down (or you
+  tap elsewhere), all of it is back.
+- **The conversation takes what the box leaves**, over it. Where that is too little to read (104 px), it steps aside for
+  the words, and comes back when they are shorter.
+- **The box is never taller than the room left**: as tall as its words, up to ten lines (or the height set with the
+  grip), and less where the room is less; then it scrolls, never under one line. The files attached stand above the
+  words inside that same room, so they never push the words off the screen.
+- **The line with the caret stays in view**: when the box gets shorter, when the keyboard comes up, and when words go
+  in that you did not type (a file's path, a dictation). Measuring again (the window's size, the board drawn again
+  every two seconds) never moves where the box is scrolled to.
+- **Where not even one line fits** (a phone on its side, the keyboard leaving 200 px), all of the chat but the box steps
+  aside too: the chat's bar, the conversation, the grip and the attached files' tiles. The files stay
+  attached (their paths are in the words) and come back with the room.
+- **On an iPhone the box also stands clear of the strip iOS floats over the page** while its keyboard is up (its arrows
+  and Done): iOS counts it as part of the visible window, so the box keeps 72 px more room at its foot. That strip was
+  measured on an iPhone's screenshot (iOS 26): its top stands 73 px over the foot of the visible window.
+- **The keyboard is known** by the web UI's own mark (its shell marks the page while a keyboard is up, as it writes the
+  height that is left); elsewhere by the visible window being much shorter than the page (and not only zoomed in).
+- **Too tall for the board without a keyboard** (a short window), the box is likewise never taller than the room left.
+
+Tried in Chromium and WebKit (Playwright) at an iPhone's size (440×956, the keyboard leaving 627 px) and an iPhone SE's
+(375×667, leaving 380), on a copy of the page with the iPhone's visible window and the web UI's mark played: an empty
+box, twenty lines, twenty lines with a picture attached, the caret in the middle with words typed there, and the
+keyboard going down; and at 844×390 on its side (the keyboard leaving 200 and 250 px) with forty lines and a picture.
+In each the card's foot and the caret's line stayed above the strip, also after a resize and after the board drew
+the chat again; before, the box ran 120 px (with a picture, 170 px) under the strip and the keyboard. Not tried on a
+real phone.
 
 ## What is the board's own, in that shape
 
@@ -78,7 +120,7 @@ Measured against **herdr-web-ui 0.4.8** (see [how](#how-it-was-measured)):
 | the lock that keeps a draft with who it was typed for | a filled chip in the lower left, beside the add button, only while the page shows somebody else: `To: HSW-34 agent · not who is shown above`. Attaching a file locks it as typing does |
 | the box's colour by who you type to ([colours](colours.md)) | the card's border: the plain text colour for the Coordinator, the task's status colour for its agent. The web UI's border is grey and turns to its accent on focus; here the border already says who, so focus draws a ring of that same colour round it |
 | the two ways to send | the round button and enter send. **Send + start** and tab, while there are words and it applies, send and put an agent on what it adds. **Send + start** is a chip of the web UI's (the shape of its one-tap replies). Each says in its tooltip what it does with the words |
-| who you talk to (the Coordinator or the task's agent), and the conversation | over the box, as wide as it: one button that names who gets your words and flips it, Hide and Show, and the conversation in a panel of its own that scrolls back and goes full screen ([the web UI](web-ui.md)) |
+| who you talk to (the Coordinator or the task's agent), and the conversation | the chat's bar over the conversation: the switch of the two you can talk to, Call, Hide and Full screen; the conversation over the box, drawn as the web UI draws its own ([the web board's chat](web-chat.md)) |
 | the notice after sending | above the chat, as before |
 | a draft is never lost | it is kept with who it is for, also over a reload. While a message is on its way the words stay in the box and a second enter does nothing. Words the board could not take stay in the box |
 | a device that may only watch | the box is faded and says so |

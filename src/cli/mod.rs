@@ -60,8 +60,8 @@ fn run(cmd: &str, a: &Args) -> Res<i32> {
     match cmd {
         // Run by an agent's own hook: silent, always 0.
         "turn-ended" => { crate::turn::turn_ended(&flag("id"), &flag("role"), &flag("token"), a.flags.i("round"), &a.pos[1..]); return Ok(0); }
-        // Run by a program in its own plan mode, when it presents its plan (plan/presented.rs).
-        "plan-written" => return Ok(crate::plan::presented::presented(&flag("id"), &flag("token"), stdin_json())),
+        // Run by a program in its own plan mode, when it presents its plan (plan/presented.rs): its answer on stdout, 0.
+        "plan-written" => { if let Some(j) = crate::plan::presented::presented(&flag("id"), &flag("token"), stdin_json()) { println!("{j}"); } return Ok(0); }
         "hook" => { crate::hook::hook_main(); return Ok(0); }
         "keeper" => { crate::keeper::keeper_main(); return Ok(0); }
         "keeper-work" => return Ok(crate::keeper::keeper_work()),
@@ -77,6 +77,10 @@ fn run(cmd: &str, a: &Args) -> Res<i32> {
         "approve-current" => { approve_current(); return Ok(0); }
         "serve" => return Ok(crate::review_page::serve_main(crate::webui::door_loop::run_door)),
         "remote" => return Ok(crate::remote::remote_main(&a.pos[1..])),
+        // A voice call's helper on the computer you sit at, and its ear on this machine: both run until they are let go.
+        // Both answer a call's requests with the board's own code, in this process (webui/voice/api.rs: local).
+        "voice" if pos(1) == "helper" => return Ok(crate::calls::helper::helper_main(std::sync::Arc::new(crate::webui::voice::api::local))),
+        "voice" if pos(1) == "listen" => return Ok(crate::calls::listen::listen_main(&flag("from"), std::sync::Arc::new(crate::webui::voice::api::local))),
         "--skill" | "skill" => { print!("{}", crate::extras::skill_text::skill_text(&crate::flow::send::shim().display().to_string())); return Ok(0); }
         "help" => { print!("{}", help::HELP); return Ok(0); }
         _ if a.flags.b("help") => { print!("{}", help::HELP); return Ok(0); }

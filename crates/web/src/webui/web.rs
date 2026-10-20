@@ -13,7 +13,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 /// `boards_at`: when the sidebar's Boards section last had the other machines asked (boards.rs).
-pub struct Client { pub s: State, pub inbox: Arc<Mutex<Vec<Event>>>, pub at: i64, pub machines_at: i64, pub boards_at: i64 }
+/// `id`: the page's own name for its board (a call it holds is called by it: voice/board.rs).
+pub struct Client { pub s: State, pub inbox: Arc<Mutex<Vec<Event>>>, pub at: i64, pub machines_at: i64, pub boards_at: i64, pub id: String }
 const IDLE: i64 = 10 * 60000;
 /// How long a call waits for what a button started (a merge, an agent started); longer, it answers on a later look.
 const WAIT: u64 = 25;
@@ -44,7 +45,7 @@ fn open() -> Client {
     s.web.own_scope = own.is_some();
     s.scope = own.unwrap_or_else(|| view.t("scope"));
     s.folded = p.arr("folded").iter().filter_map(|x| x.as_str()).map(String::from).collect();
-    Client { s, inbox: Arc::new(Mutex::new(vec![])), at: 0, machines_at: 0, boards_at: 0 }
+    Client { s, inbox: Arc::new(Mutex::new(vec![])), at: 0, machines_at: 0, boards_at: 0, id: String::new() }
 }
 pub fn client(id: &str) -> Arc<Mutex<Client>> {
     let key: String = id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').take(40).collect();
@@ -55,7 +56,7 @@ pub fn client(id: &str) -> Arc<Mutex<Client>> {
         let map = all.get_or_insert_with(HashMap::new);
         map.retain(|k, c| *k == key || c.try_lock().map(|c| now - c.at <= IDLE).unwrap_or(true));
         let fresh = !map.contains_key(&key);
-        (map.entry(key).or_insert_with(|| Arc::new(Mutex::new(open()))).clone(), fresh)
+        (map.entry(key.clone()).or_insert_with(|| Arc::new(Mutex::new(Client { id: key, ..open() }))).clone(), fresh)
     };
     { let mut g = c.lock().unwrap(); g.at = now; if fresh { reload(&mut g); if g.s.all() { poll(&mut g, true); } } }
     c
@@ -75,7 +76,7 @@ pub fn save_prefs(s: &State) {
 }
 /// Everything read again: the tasks, the closer look at the selected one and the one the chat talks to.
 pub fn reload(c: &mut Client) {
-    let wants = Wants { ids: vec![c.s.sel.clone(), c.s.reply_id.clone()], cwd: c.s.ctx.cwd.clone(), own_pane: String::new(), web: true, coord: crate::board::update::coords::wanted(&c.s) };
+    let wants = Wants { ids: vec![c.s.sel.clone(), c.s.reply_id.clone()], cwd: c.s.ctx.cwd.clone(), own_pane: String::new(), web: true, coord: crate::board::update::coords::wanted(&c.s), mine: None };
     let d = load(&wants);
     let fx = update(&mut c.s, Event::Loaded(Box::new(d)));
     effects(c, fx, false);
@@ -125,6 +126,7 @@ pub fn take_in(c: &mut Client) {
 /// Everything the page shows, and a short mark of it: a page that already has this one is told only that.
 pub fn snapshot(c: &mut Client, have: &str) -> Value {
     let t = theme();
+    let call = super::voice::board::shown(&c.id);
     let s = &mut c.s;
     let r = s.current().cloned().or_else(|| s.job().cloned());
     let a = s.auto().cloned();
@@ -133,7 +135,7 @@ pub fn snapshot(c: &mut Client, have: &str) -> Value {
     let panel = if auto_open { super::model::panel::auto_panel_of(s, t, a.as_ref().unwrap()) } else if s.full { r.as_ref().map(|r| super::model::panel::panel_of(s, t, r)).unwrap_or(Value::Null) } else { Value::Null };
     // With a task or an automation open: every setting of it, to see and to change.
     let settings = if panel.is_null() { Value::Null } else if auto_open { super::model::settings::settings_of(s, a.as_ref().unwrap(), true) } else { r.as_ref().map(|r| super::model::settings::settings_of(s, r, false)).unwrap_or(Value::Null) };
-    let mut data = obj(json!({ "list": super::model::list::list_of(s, t), "panel": panel, "settings": settings }));
+    let mut data = obj(json!({ "list": super::model::list::list_of(s, t), "panel": panel, "settings": settings, "call": call }));
     for (k, v) in super::model::side::side_of(s, t) { data.insert(k, v); }
     let text = serde_json::to_string(&data).unwrap_or_default();
     let mark: String = crate::store::files::base64url(&sha1_smol::Sha1::from(text.as_bytes()).digest().bytes()).chars().take(16).collect();
@@ -142,7 +144,9 @@ pub fn snapshot(c: &mut Client, have: &str) -> Value {
     Value::Object(data)
 }
 /// One call of the page. `role`: "drive" may change things, "watch" may only look (door.rs).
-pub fn call(client_id: &str, call: &str, args: Value, machine: &str, pcs: Option<Vec<super::pcs::Pc>>) -> Result<Value, String> {
+pub fn call(client_id: &str, call: &str, args: Value, machine: &str, pcs: Option<Vec<super::pcs::Pc>>) -> Result<Value, String> { call_with(client_id, call, args, machine, pcs, None) }
+/// The same, with the web UI as the front door reaches it (a file attached for another machine goes through it).
+pub fn call_with(client_id: &str, call: &str, args: Value, machine: &str, pcs: Option<Vec<super::pcs::Pc>>, ui: Option<&dyn super::attach::far::WebUi>) -> Result<Value, String> {
     // From here on the board's words name a key as its button on the page.
     crate::board::keys::name_as_buttons(true);
     let c = client(client_id);
@@ -161,9 +165,9 @@ pub fn call(client_id: &str, call: &str, args: Value, machine: &str, pcs: Option
             let kept = super::view::send(c, args.s("text"), args.b("delegate"), to);
             let mut o = snapshot(c, ""); o.as_object_mut().unwrap().insert("kept".into(), json!(kept)); Ok(o)
         }
-        // The chat full screen: the web UI's own chat view of whoever it talks to, where it can show them.
-        "full" => { let full = super::full::full(c, drive); let mut o = snapshot(c, ""); o.as_object_mut().unwrap().insert("full".into(), json!(full)); Ok(o) }
-        "attach" => { if !drive { return watch(); } super::attach::attach(c, &args) }
+        // Where the web UI's own chat of whoever the chat talks to is, to dock it under the list (null: the board's own).
+        "dock" => { let d = super::dock::dock(c); let mut o = snapshot(c, ""); o.as_object_mut().unwrap().insert("dock".into(), d); Ok(o) }
+        "attach" => { if !drive { return watch(); } super::attach::attach_with(c, &args, ui) }
         "set" => {
             if !drive { return watch(); }
             let v = args.at("value");
