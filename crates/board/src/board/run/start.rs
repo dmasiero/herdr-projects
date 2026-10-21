@@ -17,7 +17,7 @@ fn env(k: &str) -> String { std::env::var(k).unwrap_or_default() }
 /// What the board shows before herdr was asked: the tasks as they were saved.
 pub fn quick_data(cwd: &str) -> Data {
     let tasks = crate::store::tasks::list(crate::store::tasks::ListOpts { include_archived: true, ..Default::default() });
-    let row = |t: &crate::store::tasks::Task| { let mut x = crate::flow::live::saved(t); x.put("research", crate::research::is_research(t)); std::sync::Arc::new(crate::shown::states::as_row(&x)) };
+    let row = |t: &crate::store::tasks::Task| { let mut x = crate::flow::live::saved(t); x.put("research", crate::research::is_research(t)); x.put("chatOnly", crate::chat_only::is_chat(t)); std::sync::Arc::new(crate::shown::states::as_row(&x)) };
     let n = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).clamp(1, 8);
     let items = if tasks.len() < 32 { tasks.iter().map(row).collect() } else { let chunk = tasks.len().div_ceil(n); std::thread::scope(|sc| tasks.chunks(chunk).map(|c| sc.spawn(move || c.iter().map(row).collect::<Vec<_>>())).collect::<Vec<_>>().into_iter().flat_map(|h| h.join().unwrap_or_default()).collect()) };
     let roots: std::collections::BTreeMap<String, String> = crate::store::repos::known_repos().iter().map(|(k, v)| (k.clone(), text(v))).collect();
@@ -33,6 +33,7 @@ pub fn prepare(folder: &std::path::Path) -> (State, Theme, Option<(String, Strin
     let asked = term::ask_colours();
     crate::keeper::ensure_keeper(); // the board opening is one of the keeper's starters
     crate::flow::send::shim(); // the launcher in the data folder, there from the first time the board opens
+    crate::leftovers::sweep::at_start(); // what ended tasks left behind (docs/disk-space.md)
     let _ = crate::extras::sync_skill(); crate::extras::remove_popups(); crate::extras::refresh_sidebar();
     let reloads: i64 = env("HERDR_PROJECTS_RELOADS").parse().unwrap_or(0);
     let named = place::name_board_tab(&place::board_pane());

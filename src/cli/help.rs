@@ -2,10 +2,11 @@
 pub const HELP: &str = r#"herdr-projects: a work board for herdr
 
   herdr-projects                     open the board here (in herdr: bind a key to the plugin action "open")
-  herdr-projects add <title> [--desc TEXT] [--repo NAME|PATH] [--delegate] [--after ID[,ID…]] [--<setting> VALUE ...] [--research|--no-research]
+  herdr-projects add <title> [--desc TEXT] [--repo NAME|PATH] [--delegate] [--after ID[,ID…]] [--<setting> VALUE ...] [--research|--no-research] [--chat|--no-chat]
                                       (--research: research only, short for --research.only true. Its agent changes
                                        nothing in the repo; the result is a report. --no-research: not research only,
-                                       where a default says it is)
+                                       where a default says it is. --chat: chat only, short for --chat.only true: a
+                                       conversation that changes nothing and ends only when you say: finish <id>)
   herdr-projects list [--archived] [--all] [--query TEXT] [--json]
   herdr-projects report <id> --state idle|working|blocked|done|error [--kind question|permission|auth] [--msg TEXT] [--title TEXT]
                          [--progress 0-100] [--eta MINUTES]   (your own task, with --state working: how far, and minutes left)
@@ -13,7 +14,7 @@ pub const HELP: &str = r#"herdr-projects: a work board for herdr
   (a title is at most 60 characters: a longer one is shortened at a word, its full text kept in the description)
   (an <id> is repo/134; every repo has a short key, made from its name, and HSW-134 names the same task, in any
    letter case. Another key: herdr-projects set repo.key HSW --repo NAME; the old one still names its tasks)
-  herdr-projects delegate <id> [--after ID[,ID…]|--now] [--<setting> VALUE ...] [--research|--no-research]
+  herdr-projects delegate <id> [--after ID[,ID…]|--now] [--<setting> VALUE ...] [--research|--no-research] [--chat|--no-chat]
                                       any work setting, for this task only: --reviewer.agent claude --merge.by itself
                                       (a refused option changes nothing on the task)
                                       --after: start only once those tasks (of any repo here, or of another machine:
@@ -31,9 +32,12 @@ pub const HELP: &str = r#"herdr-projects: a work board for herdr
   herdr-projects retry <id>                    send the saved error back to the agent; on a task a limit stopped: continue
   herdr-projects fix <id>                      send failure details to the agent (never approves a merge)
   herdr-projects finish <id>                   finish anyway, when the agent stopped without a summary or at a limit,
-                                                or when the board missed it finishing (its agent at rest, the row still "Finishing")
+                                                or when the board missed it finishing (its agent at rest, the row still "Finishing");
+                                                on a chat-only task: end the conversation, as it is
   herdr-projects details <id>                  failure details, review, next steps, and what it used against its limits
   herdr-projects pin|archive|restore|clear <id>
+  herdr-projects archive --done [--repo NAME]  archive every done task of that repo (or of every repo) in one go; one
+                                                that works, waits, is to do or is pinned stays, and is counted
   herdr-projects set <name> <value> [--repo NAME | --task ID | --automation NAME]
                                       change a setting: for you, for your entry for one repo, for one task, or for an automation
   herdr-projects unset <name> [--repo NAME | --task ID]
@@ -59,8 +63,11 @@ pub const HELP: &str = r#"herdr-projects: a work board for herdr
   herdr-projects coordinator --machine …       the same for this machine's machine coordinator
   herdr-projects coordinator --project REPO …  the same for a repo's project coordinator
   herdr-projects --skill                       instructions an agent can load
-  herdr-projects machines                      other machines: whether each answers, its version, or why not and what to do;
-                                                and whether another machine could ask this one
+  herdr-projects machines                      other machines: whether each answers, its version and free disk, or why not
+                                                and what to do; and whether another machine could ask this one
+  herdr-projects sweep [--dry]                 remove what ended tasks left behind now: their temporary files, agents'
+                                                files for worktrees that are gone, old build output (docs/disk-space.md);
+                                                --dry: only say what would go
   herdr-projects web-ui [link|unlink]          the board inside the herdr web UI: how it stands; point the web UI's shared link at it, or back
   herdr-projects voice [end|test]              voice calls here: where the ElevenLabs key is found (ELEVENLABS_API_KEY,
                                                 or ~/.herdr-projects/settings/elevenlabs.json), the call helper on this

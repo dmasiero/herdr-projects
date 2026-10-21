@@ -121,7 +121,7 @@ there is no other way in. `git diff --stat upstream/main main` lists them as the
 | `scripts/check.sh`, `scripts/setup.sh` | Find cargo through `scripts/cargo.sh`, and say how to get Rust where it is missing (`nix develop`). |
 | `scripts/linker.sh`, `docs/linking.md` | A `mold` on the PATH where the pinned one cannot be installed (NixOS). |
 | `docs/install.md`, `docs/how-work-gets-done.md` | One line each linking the fork's pages. |
-| `tests/main.rs` | The fork's test modules. |
+| `tests/main.rs` | The fork's test modules; its header comment folded to two lines and no blank line, so the list stays within 300 lines. |
 | `tests/common/mod.rs`, `tests/common/gh.rs` | The fake `tea` in every test world; the fake gh knows a PR merged already. |
 | `tests/check_script.rs`, `tests/install.rs`, `tests/linking.rs`, `tests/take_over_more.rs` | Real-program tests that pass on NixOS (`bare_path`, coreutils as one program, mold on the PATH). |
 | `README.md` | One line linking this page. |

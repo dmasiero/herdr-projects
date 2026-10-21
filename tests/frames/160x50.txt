@@ -185,7 +185,7 @@
    alt+a        show the archive
    alt+s        group by repo: see which repo each task is in
    alt+d        show all done
-   alt+m        show every machine's tasks (now: this machine)
+   alt+m        look for other machines (now: this machine)
 
  on a row
    ◐            an agent works
@@ -195,7 +195,7 @@
    ?            asks you
    !            asks for your OK
    @            needs a login
- ↓ 9 more
+ ↓ 10 more
 
  + New task  added word for word
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

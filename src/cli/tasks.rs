@@ -1,7 +1,7 @@
 //! The commands on tasks and settings: each returns what --json prints and what a person reads.
 use super::flags::{pick_choices, Args};
 use super::{caller, context_folder};
-use crate::actions::{archive, filing, finish_line, settings::{settings_command, Where}, start, talk};
+use crate::actions::{archive, archive_done, filing, finish_line, settings::{settings_command, Where}, start, talk};
 use crate::board::keys::key_name;
 use crate::err::Res;
 use crate::flow::live::board;
@@ -14,12 +14,13 @@ use crate::store::{keys::{repo_keys, tag_of}, reviews::{current_review, review_r
 /// One task of `list`: named by its key (`HSW-134`), in a column of its own.
 fn line(t: &Obj, keys: &crate::store::keys::Keys) -> String {
     format!("{:<9} {:<8}{}{}  {}{}{}{}", crate::store::keys::say_id(t.s("id"), keys), t.t("state"), if t.b("kind") { format!(" {}", t.s("kind")) } else { String::new() }, if t.b("shownApp") { format!(" [{}]", t.s("shownApp")) } else { String::new() },
-        t.s("title"), if t.b("research") { " [research]" } else { "" }, if queued(t) { format!("  · {}", queue_words(t)) } else if !crate::after::todo_line(t).is_empty() { format!("  · {}", crate::after::todo_line(t)) } else if t.b("note") { format!("  · {}", t.s("note")) } else { String::new() }, if t.b("archivedAt") { "  (archived)" } else { "" })
+        t.s("title"), if t.b("chatOnly") { " [chat]" } else if t.b("research") { " [research]" } else { "" }, if queued(t) { format!("  · {}", queue_words(t)) } else if !crate::after::todo_line(t).is_empty() { format!("  · {}", crate::after::todo_line(t)) } else if t.b("note") { format!("  · {}", t.s("note")) } else { String::new() }, if t.b("archivedAt") { "  (archived)" } else { "" })
 }
 fn brief(t: &Obj) -> Value {
     let mut o = obj(json!({ "id": t.at("id"), "state": t.at("state"), "kind": t.at("kind"), "app": t.at("shownApp"), "title": t.at("title"), "msg": t.at("note"), "stage": t.at("stage"), "progress": t.at("progress"), "eta": t.at("eta") }));
     if t.b("pr") { o.put("pr", t.at("pr").clone()); }
     if t.b("research") { o.put("research", t.at("research").clone()); }
+    if t.b("chatOnly") { o.put("chat", true); }
     if !queue_tag(t).is_empty() { o.put("queue", t.i("queuePlace")); } // its place in the queue for a free slot: 1 gets the next
     if t.b("archivedAt") { o.put("archivedAt", t.at("archivedAt").clone()); }
     if let Some(rv) = current_review(t) { o.put("review", rv.clone()); }
@@ -54,7 +55,7 @@ pub fn command(cmd: &str, a: &Args) -> Res<(Value, String)> {
                 let how = crate::after::waiting_words(&d).map(|w| format!(", it {w}")).unwrap_or_else(|| ", an agent is on it".into());
                 format!("{how}{}", if tab { format!(" (the message was sent with {})", key_name("delegate")) } else { String::new() })
             } else if let Some(d) = &after { format!(", it will wait for {} to be done once it is delegated", crate::after::names(d)) } else { String::new() };
-            (shown_of(t.s("id")), format!("{}: added{}{on}{}", t.s("id"), if is_research(&t) { " as research only" } else { "" }, title_note(&rest(1))))
+            (shown_of(t.s("id")), format!("{}: added{}{on}{}", t.s("id"), if crate::chat_only::is_chat(&t) { " as chat only" } else if is_research(&t) { " as research only" } else { "" }, title_note(&rest(1))))
         }
         "list" | "ls" => {
             let q = flag("query").unwrap_or_default().trim().to_lowercase(); // a task is found by its number and its tag too: 134, #134, hsw-134
@@ -109,7 +110,17 @@ pub fn command(cmd: &str, a: &Args) -> Res<(Value, String)> {
         "finish" => said(finish_line::finish_anyway(&need(1, "an id")?)?),
         "details" => { let d = tidy(finish_line::details(&need(1, "an id")?)?); let s = serde_json::to_string_pretty(&d).unwrap_or_default(); (d, s) }
         "pin" => { let t = filing::pin(&need(1, "an id")?)?; (shown_of(t.s("id")), format!("{}: {}", t.s("id"), if t.b("pinned") { "pinned" } else { "unpinned" })) }
-        "archive" => { let t = archive::archive(&need(1, "an id")?)?; (shown_of(t.s("id")), format!("{}: archived", t.s("id"))) }
+        // A round of work is over: every done task of a repo (or of every repo) in one go.
+        "archive" if flags.b("done") => {
+            if pos.len() > 1 { crate::fail!("archive --done takes no id: it archives every done task (of --repo NAME). Try: herdr-projects help"); }
+            if flags.has("repo") && flag("repo").is_none() { crate::fail!("--repo needs a repo's name: herdr-projects archive --done --repo NAME"); }
+            let r = archive_done::archive_done(flag("repo").as_deref())?;
+            (r.json(), r.said)
+        }
+        "archive" => {
+            if flags.has("repo") { crate::fail!("--repo goes with --done: herdr-projects archive --done --repo NAME"); }
+            let t = archive::archive(&need(1, "an id")?)?; (shown_of(t.s("id")), format!("{}: archived", t.s("id")))
+        }
         "restore" | "unarchive" => { let t = archive::restore(&need(1, "an id")?)?; (shown_of(t.s("id")), format!("{}: restored", t.s("id"))) }
         "clear" => {
             let (id, kept) = archive::clear(&need(1, "an id")?)?;
@@ -123,6 +134,7 @@ pub fn command(cmd: &str, a: &Args) -> Res<(Value, String)> {
         "models" => crate::agents::models::say::models_command(&pos.get(1).cloned().unwrap_or_default())?,
         "automations" | "automation" => crate::automations::command::automations_command(&pos[1..], flags, &here)?,
         "coordinator" => coordinator(a, &here)?,
+        "sweep" => { let r = crate::leftovers::sweep::sweep_with(flags.b("dry")); let s = crate::leftovers::sweep::say(&r); (r, s) }
         "machines" => { let r = crate::remote::check::check(20000); let s = crate::remote::check::say(&r); (r, s) }
         "voice" => crate::calls::command::main(&pos[1..]),
         "web-ui" => { let r = crate::webui::command::main(&pos[1..]); if !r.b("ok") { crate::fail!("{}", r.s("msg")); } let m = r.t("msg"); (r, m) }
