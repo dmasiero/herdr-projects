@@ -124,6 +124,7 @@ there is no other way in. `git diff --stat upstream/main main` lists them as the
 | `tests/main.rs` | The fork's test modules; its header comment folded to two lines and no blank line, so the list stays within 300 lines. |
 | `tests/common/mod.rs`, `tests/common/gh.rs` | The fake `tea` in every test world; the fake gh knows a PR merged already. |
 | `tests/check_script.rs`, `tests/install.rs`, `tests/linking.rs`, `tests/take_over_more.rs` | Real-program tests that pass on NixOS (`bare_path`, coreutils as one program, mold on the PATH). |
+| `tests/board_parts.rs`, `tests/automations_open.rs` | The settings page's screen one row taller: `merge.forge` is one more row. |
 | `README.md` | One line linking this page. |
 
 Upstream may take some of this one day (the follow-up PR, `bare_path`, the NixOS test fixes are not Nix-only in
