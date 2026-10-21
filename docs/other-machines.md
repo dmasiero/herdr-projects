@@ -10,8 +10,12 @@ Which machines you see is the first thing in the board's header, in the accent c
 ## Set up another machine
 
 Machines are found through Herdr only: the ones you added with `herdr machine add`, or the ones you name in
-`board.machines`. With none, `Alt+M` says so. There is no Tailscale discovery. They are listed in the order of Herdr's
-machines sidebar ([machine order](machine-order.md)).
+`board.machines`. There is no Tailscale discovery. They are listed in the order of Herdr's machines sidebar
+([machine order](machine-order.md)).
+
+With no other machine there is no "every machine" to show, on the terminal board and on the web: `Alt+M` asks Herdr
+for its machines (`Looking for other machines…`), says when there are none, and shows every machine as soon as there
+is another one. A board that showed every machine goes back to this machine's own when the others are gone.
 
 Each other machine needs, once:
 
@@ -36,9 +40,13 @@ not running interactively, return" line, so a PATH set below that line is not fo
 
 Fix it either way:
 
-- set the PATH in the profile file: `~/.profile` or `~/.bash_profile` for bash, `~/.zprofile` for zsh;
+- set the PATH in the profile file: `~/.profile` or `~/.bash_profile` for bash, `~/.zprofile` for zsh,
+  `~/.config/fish/config.fish` for fish (outside its `if status is-interactive` block);
 - or link the launcher into a folder a login shell already has:
   `ln -s ~/.herdr-projects/data/bin/herdr-projects ~/.local/bin/`.
+
+Any login shell does, fish too: the board hands it only words every shell reads alike, and lets `/bin/sh` start it
+with the command.
 
 Test it from the machine the board is on. All is well when it ends with a line of JSON:
 
