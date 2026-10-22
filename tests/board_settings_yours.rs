@@ -1,6 +1,6 @@
 //! Your own settings on the board: the settings key on this machine's heading opens the settings page for yours (what
-//! every task starts from), on a repo's heading for your entry for that repo, and on a task still for that task; the
-//! ? menu has them too. A change there is the one `herdr-projects set` makes, put back the one `unset` makes; another
+//! every task starts from), on a repo's heading for your entry for that repo (each under the heading's coordinator's
+//! own rows, as a heading stands for its coordinator), and on a task still for that task; the ? menu has them too. A change there is the one `herdr-projects set` makes, put back the one `unset` makes; another
 //! machine's are changed on that machine.
 use crate::common;
 use common::board::{open, Board};
@@ -22,13 +22,15 @@ fn pick(b: &mut Board, name: &str) {
 fn whose(b: &Board) -> Option<Whose> { b.s.editing.as_ref().map(|e| e.whose.clone()) }
 /// A board with every machine shown: this machine's tasks and otherbox's one.
 fn every_machine() -> (World, Board, String) {
-    let w = world_with(Opts { repo: true, settings: json!({ "board.machines": "otherbox" }), ..Default::default() });
+    // A coordinator can run here: a machine's and a repo's row are their coordinators'.
+    let w = world_with(Opts { repo: true, settings: json!({ "board.machines": "otherbox", "coordinator.agent": "claude" }), ..Default::default() });
+    let home = w.base.join("home-coord"); std::fs::create_dir_all(&home).unwrap(); unsafe { std::env::set_var("HERDR_PROJECTS_COORDINATOR_DIR", &home) };
     let id = w.add("Mine");
     let mut b = open(&w.root, 120); b.s.side = false;
     update(&mut b.s, Event::Machines(sw::remote::machines()));
     let now = sw::clock::now();
     update(&mut b.s, Event::Remote { label: "otherbox".into(), answer: Ok(json!({ "host": "otherbox", "version": "0.2.0", "tasks": [{ "id": "proj/151", "title": "Theirs", "state": "idle", "stage": "todo", "at": now, "created": now }] })) });
-    b.press(&["alt+m"]); assert_eq!(b.s.scope, "*");
+    for _ in 0..4 { if b.s.scope == "*" { break; } b.press(&["alt+m"]); } assert_eq!(b.s.scope, "*");
     (w, b, id)
 }
 
@@ -37,18 +39,19 @@ fn the_settings_key_on_this_machines_heading_changes_your_own_settings_and_a_tas
     let (_w, mut b, id) = every_machine();
     b.s.sel = "head:machine\t".into();
     b.press(&["ctrl+e"]);
-    assert_eq!(whose(&b), Some(Whose::You));
+    assert_eq!(whose(&b), Some(Whose::Coord("machine".into(), "you".into())));
+    b.rows = 160; // the page is whole on the screen: its coordinator's rows come first
     let t = b.screen(120).join("\n");
-    assert!(t.contains("Settings  yours: what every task starts from"), "{t}");
+    assert!(t.contains("This coordinator") && t.contains("Every coordinator and task (you)") && t.contains("autopilot.every"), "the heading's coordinator's rows, then yours: {t}");
     assert!(t.contains("Merge method") && t.contains("merge.method") && t.contains("built in") && t.contains("The board key opens"), "work and board settings, each saying where it comes from: {t}");
-    assert!(t.contains("* set by you") && t.contains("esc back to the list"), "{t}");
+    assert!(t.contains("set by you") && t.contains("esc back to the list"), "{t}");
     // enter takes a choice to its next value: the one `set` would save, and `show` says it is yours.
     pick(&mut b, "merge.method");
     b.press(&["enter"]);
     assert_eq!(shown(&Scope::you(), "merge.method"), ("merge".into(), "you".into(), true));
     let task = sw::store::tasks::get(&id).unwrap();
     assert_eq!(shown(&Scope::task(&task), "merge.method"), ("merge".into(), "you".into(), false), "a task with no answer of its own follows");
-    assert!(b.text().contains("Merge method: merge"), "{}", b.text());
+    assert!(!b.text().contains("Merge method: merge"), "no confirmation under the chat: the row shows it: {}", b.text());
     let t = b.screen(120).join("\n");
     assert!(t.lines().any(|l| l.contains("› * Merge method") && l.contains("merge.method")), "the row is marked as yours: {t}");
     // ctrl+u puts it back to built in.
@@ -72,9 +75,9 @@ fn on_a_repos_heading_it_is_your_entry_for_that_repo_on_a_task_the_tasks_own_and
     b.press(&["alt+s"]); assert!(b.s.by_repo);
     b.s.sel = "head:repo\t\tproj".into();
     b.press(&["ctrl+e"]);
-    assert_eq!(whose(&b), Some(Whose::Repo("proj".into())));
     let t = b.screen(120).join("\n");
-    assert!(t.contains("your entry for proj") && !t.contains("The board key opens"), "a repo's entry has no board settings: {t}");
+    assert_eq!(whose(&b), Some(Whose::Coord("project:proj".into(), "repo:proj".into())));
+    assert!(t.contains("Your entry for proj") && !t.contains("The board key opens"), "a repo's entry has no board settings: {t}");
     pick(&mut b, "merge.method");
     b.press(&["enter"]);
     assert_eq!(shown(&Scope::repo("proj"), "merge.method"), ("merge".into(), "your entry for proj".into(), true));
@@ -98,7 +101,10 @@ fn on_a_repos_heading_it_is_your_entry_for_that_repo_on_a_task_the_tasks_own_and
     b.s.sel = "head:machine\totherbox".into();
     b.press(&["ctrl+e"]);
     assert!(b.s.editing.is_none());
-    assert!(b.text().contains("Your settings on otherbox are changed on otherbox itself"), "{}", b.text());
+    let said = b.text().replace("\n  ", " ");
+    // otherbox sends no coordinators of its own (an older version): its row is its top-level coordinator's
+    assert!(said.contains("settings are changed on otherbox: herdr-projects set <name> <value> --main-coordinator there"), "{said}");
+    assert!(b.s.full, "its coordinator shown whole, read-only, in the page's place");
 }
 
 #[test]

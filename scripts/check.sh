@@ -10,7 +10,7 @@
 set -e
 # A check that stops says why, also when a step stopped it with no word of its own (`set -e`).
 step="starting"
-trap 'st=$?; [ "$st" = 0 ] || echo "The check stopped while $step (exit $st)." >&2' EXIT
+trap 'st=$?; sc_leave 2>/dev/null; [ "$st" = 0 ] || echo "The check stopped while $step (exit $st)." >&2' EXIT
 quit() { echo "$1" >&2; trap - EXIT; exit 2; }
 here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$here"
@@ -35,8 +35,8 @@ done
 say() { [ -n "$HERDR_PROJECTS_PROGRESS" ] && printf '%s\n' "$1" > "$HERDR_PROJECTS_PROGRESS" || true; }
 . scripts/cargo.sh
 cargo_found || quit "The check needs Rust (cargo), which is not on the PATH: $cargo_hint."
-# Compiles through the build cache every worktree shares, when the workspace setup installed it, on this task's share
-# of the cores (docs/testing.md).
+# Compiles through the build cache every worktree shares, when the workspace setup installed it, on its share of the
+# cores: counted among the checks running now from here until it ends (docs/testing.md).
 . scripts/build-cache.sh
 . scripts/share-cores.sh
 # The code as it stands, new files and uncommitted changes too, and the compiler that builds it.
@@ -60,9 +60,10 @@ if [ "$fresh" = 0 ] && [ -n "$stamp" ] && [ -f "$cache/$stamp" ]; then
   exit 0
 fi
 started=$(date +%s)
+sc_join
 say "0/3 steps"
 step="building the program"
-cargo build --profile quick --quiet
+sc_cargo build --profile quick --quiet
 say "1/3 steps"
 # The made tables, written when out of date; then the rules (tests/guard.rs runs them too).
 step="writing the made tables"

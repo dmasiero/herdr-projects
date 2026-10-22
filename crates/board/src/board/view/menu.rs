@@ -3,7 +3,7 @@
 //! is whole (a long one wraps under itself); where the menu is longer than its room it scrolls, and says so.
 use super::fields::AUTO_MARK;
 use super::list::hl;
-use crate::board::keys::{pair, say, GROUPS, KEYS};
+use crate::board::keys::{group_name, pair, say, GROUPS, KEYS};
 use crate::board::state::State;
 use crate::board::tags::name_say;
 use crate::board::theme::Theme;
@@ -27,8 +27,9 @@ pub fn menu_lines(s: &mut State, t: &Theme, width: usize, h: usize) -> Vec<Inked
     let mut picked = (0usize, 0usize);
     for (group, gname) in GROUPS {
         if !lines.is_empty() { lines.push(Inked::new()); }
-        lines.push(Inked::plain(" ").add(Inked::of(gname, Ink::Soft)));
-        if group == "plain" { for (k, d) in &plain { lines.extend(entry(k, d)); } }
+        lines.push(Inked::plain(" ").add(Inked::of(group_name(group, gname), Ink::Soft)));
+        // Not a key of the board: typed first in the text box, it lists the skills of whom the chat talks to (skills.rs).
+        if group == "plain" { for (k, d) in &plain { lines.extend(entry(k, d)); } lines.extend(entry("/", "typed first: pick a skill of whom you talk to")); }
         for (n, it) in list.iter().enumerate() {
             if it.group != group { continue; }
             if n as i64 != at { lines.extend(entry(&it.key, &it.label)); continue; }
@@ -43,6 +44,8 @@ pub fn menu_lines(s: &mut State, t: &Theme, width: usize, h: usize) -> Vec<Inked
     lines.push(Inked::plain(" ").add(Inked::of("on a row", Ink::Soft)));
     for (c, m, w) in marks { lines.push(Inked::plain("   ").add(Inked::of(crate::text::pad(m, col), c)).add(Inked::of(w, Ink::Muted))); }
     lines.push(Inked::plain("   ").add(Inked::of(crate::text::pad(AUTO_MARK, col), Ink::Auto)).add(Inked::of("an automation (dimmed while it is off; the word after it says on or off)", Ink::Muted)));
+    // A machine's or a project's row: its coordinator's state with the same marks, and autopilot's; none while idle.
+    lines.push(Inked::plain("   ").add(Inked::of(crate::text::pad(super::pilot::PILOT_MARK, col), Ink::Plain)).add(Inked::of(format!("a coordinator on autopilot (a machine's or a project's row; else {} {} {} {} as a task's)", t.mark("idle", ""), t.mark("working", ""), t.mark("blocked", "question"), t.mark("error", "")), Ink::Muted)));
     lines.extend(entry("65% 2m left", "how far it is, and the time left; the time after it is how long it has worked, or how long ago it stopped"));
     // What a row's review tag says: each state is named in its colour, the tag's own.
     let words: Vec<(Ink, String)> = [(Ink::Muted, "the review it is on or last had, coloured by where it stands:"), (Ink::Green, "passed,"), (Ink::Red, "failed,"), (Ink::Review, "the reviewer working")].iter().flat_map(|(c, x)| x.split(' ').map(move |w| (*c, w.to_string()))).collect();
