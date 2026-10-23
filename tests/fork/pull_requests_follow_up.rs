@@ -84,7 +84,7 @@ fn a_chat_with_a_task_whose_pull_request_the_board_merged_opens_a_follow_up_inst
     w.gh_says(json!({ "head": head(&t), "createUrl": "https://github.com/o/r/pull/8" }));
     // the board merged it, and its space stayed (its agent was in use again, as on OPS-3)
     on_main(&t);
-    w.gh.merged.borrow_mut().push("7".into());
+    w.gh.merged.push("7");
     sw::store::tasks::update_wait(&id, 10000, |t| { t.put("stage", "done"); t.put("msg", "Merged: https://github.com/o/r/pull/7"); t.put("prMerged", true); t.put("prState", "merged"); t.put("mergedAt", sw::clock::now()); Ok(sw::store::tasks::Change::Write) }).unwrap();
     // the human goes on in the agent's pane, as on OPS-3: the agent commits more on the same branch
     sw::clock::set(Some(sw::clock::now()));

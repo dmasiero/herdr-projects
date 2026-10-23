@@ -2,6 +2,11 @@
 //! runs a build of the fork's checkout, never upstream's downloaded program, which lacks the fork's changes.
 use std::path::{Path, PathBuf};
 
+/// NixOS's login shell: a keeper without `XDG_RUNTIME_DIR` still finds the SSH agent (login_env/nixos.rs).
+mod nixos_login_env;
+/// A pull request merged already: newer work goes in a follow-up pull request (finish/follow_up.rs).
+mod pull_requests_follow_up;
+
 fn root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
 
 #[test]

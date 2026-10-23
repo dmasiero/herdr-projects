@@ -87,7 +87,9 @@ fn login_of(t: &Task) -> bool { (t.s("stage") == "failed" && t.at("failure").b("
 pub fn can_send_error(t: &Task) -> bool {
     (t.s("stage") == "nosummary" || (t.s("stage") == "failed" && (!t.at("failure").b("auth") || t.at("failure").s("stage") == "agent"))) && flow::task::is_agent_task(t) && !t.b("archivedAt")
 }
-pub fn send_error(id: &str) -> Res<Said> {
+pub fn send_error(id: &str) -> Res<Said> { send_error_noted(id, "") }
+/// The same, with a note of what to do differently (`retry <id> <note>`, as an autopilot wake retries).
+pub fn send_error_noted(id: &str, note: &str) -> Res<Said> {
     let cur = find(id)?;
     assert_unarchived(&cur)?;
     let cid = cur.t("id");
@@ -101,7 +103,7 @@ pub fn send_error(id: &str) -> Res<Said> {
     if !can_send_error(&cur) { crate::fail!("{cid} has no agent error to send. Login blockers need the human first."); }
     let why = if cur.at("failure").b("detail") { cur.at("failure").t("detail") } else if cur.b("msg") { cur.t("msg") } else { "No details were saved.".into() };
     let title = if cur.at("failure").b("title") { format!("{}\n\n", cur.at("failure").t("title")) } else { String::new() };
-    let out = tell(&cid, &format!("This task ran into an error:\n\n{title}{why}\n\nInvestigate and fix the cause, then finish again. Run the checks before finishing. If a login, permission or human decision is needed, report blocked instead of retrying it yourself."), false)?;
+    let out = tell(&cid, &format!("This task ran into an error:\n\n{title}{why}\n\nInvestigate and fix the cause, then finish again. Run the checks before finishing. If a login, permission or human decision is needed, report blocked instead of retrying it yourself.{}", if note.trim().is_empty() { String::new() } else { format!("\n\n{}", note.trim()) }), false)?;
     update(&cid, |t| { if t.at("failure").is_object() { t.obj_mut("failure").put("sentAt", now()); } Ok(Change::Write) })?;
     Ok(say(out.task, format!("{cid}: sent to the agent to fix")))
 }
@@ -267,7 +269,7 @@ pub fn details(id: &str) -> Res<Value> {
         "inUse": if t.at("tidy").b("inUse") { t.at("tidy").at("inUse").clone() } else { Value::Null }, // what keeps its space in use, every thing
         "limits": limits_detail(&t, now()),
     }));
-    // Waiting for a free slot: its place in the queue, and in words ("waiting for a free slot, Q#2").
+    // Waiting in the queue: its place, and in words ("waiting for a free slot, Q#2", "waiting for disk space, Q#1").
     if let Some(n) = crate::flow::live::queue_place(&t) { let mut q = t.clone(); q.put("queuePlace", n); out.put("queue", json!({ "place": n, "words": crate::shown::queue::words(&q) })); }
     // A merge that waits for GitHub's checks: which ones, each once (the row says only how far they are).
     if t.b("checksWait") { let w = t.at("checksWait"); out.put("checksWaitingFor", json!(crate::land::checks::unique(strings(w.at("names")).into_iter().chain(strings(w.at("flows")))))); }

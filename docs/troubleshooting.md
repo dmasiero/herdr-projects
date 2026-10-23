@@ -33,6 +33,7 @@ with `✗` is a problem, with what to do under it. It exits 1 when there is a pr
 | other machines | one does not answer, runs an older version, or cannot ask this one | what `herdr-projects machines` says ([other machines](other-machines.md)) |
 | disk space | under 10 GB free on a disk that holds the board's data, your repos, worktrees, build caches or temporary files: a task's setup may fail there | free some space, starting with the leftovers below |
 | leftovers | the worktree of a done or archived task (a clean-up keeps one with unsaved work), a worktree on a task branch no task has, one git still lists whose folder is gone, an old warm build in `~/.cache/herdr-projects` | the `git worktree remove`, `git worktree prune` or `rm -rf` it names. It never removes anything itself; `herdr-projects sweep` removes what is provably an ended task's ([disk space](disk-space.md)) |
+| coordinators' queues | a message waits undelivered for more than a minute, as when `coordinator tell` ran where herdr could not be found | open the board in Herdr, which delivers it; in that shell, set `HERDR_BIN_PATH` to herdr's full path ([the Coordinator](coordinator.md)) |
 | older installs | herdr-superwork or herdr-projects 0.2 still in the way | it takes over what it can, and says what is left ([older installs](old-installs.md)) |
 
 Other machines are asked only when there are some, and each for at most 5 seconds. A done task's worktree is no
@@ -195,6 +196,10 @@ The task panel shows most of this already. `herdr-projects details <id>` prints 
 
 - **`herdr-projects` is not found**: open the board once from Herdr (the plugin's action "Open the work board"), then add
   `~/.herdr-projects/data/bin` to your PATH ([installing](install.md#the-command-on-your-path)).
+- **`herdr` is not found although it is installed**: a command run over plain SSH (`ssh host herdr-projects …`) gets
+  no login shell, so its PATH often lacks `~/.local/bin`. When PATH has no `herdr`, the board looks in
+  `~/.local/bin`, `~/.cargo/bin`, `~/bin`, `/usr/local/bin` and `/opt/homebrew/bin`, then in a login shell's PATH. Herdr
+  somewhere else: set `HERDR_BIN_PATH` to its full path.
 - **The board key does nothing**: a popup of another plugin may be open (close it first), or the key is not bound. The
   board offers the key on its first screen ([installing](install.md#the-first-run)).
 - **The board looks cut off or half empty**: another Herdr window on the same session (a second device, a browser tab)
