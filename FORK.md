@@ -124,6 +124,7 @@ and `tests/common/tea.rs`.
 | `tests/main.rs` | The fork's test modules, only `fork` and `gitea` (their other files are modules of those two); its header comment folded to two lines and no blank line, so the list stays within 300 lines. |
 | `tests/common/mod.rs`, `tests/common/gh.rs` | The fake `tea` in every test world, and its own `XDG_DATA_HOME` (NixOS sets one, so Devin's plugins were looked for in the real home); the fake gh knows a PR merged already, by number (`merged`, whose `get()` still says whether it merged any, as upstream's tests ask), and a `createUrl`. |
 | `tests/check_script.rs`, `tests/install.rs`, `tests/linking.rs`, `tests/take_over_more.rs` | Real-program tests that pass on NixOS (`bare_path`, coreutils as one program, mold on the PATH). |
+| `tests/autopilot_board.rs` | The autopilot frame keeps "the machine coordinator" when the host is named `machine`, as the NixOS test VM is. |
 | `tests/board_parts.rs`, `tests/automations_open.rs` | The settings page's screen one row taller: `merge.forge` is one more row. |
 | `README.md` | One line linking this page. |
 
