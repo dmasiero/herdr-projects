@@ -103,9 +103,9 @@ there is no other way in. `git diff --stat upstream/main main` lists them as the
 `flake.nix`, `flake.lock`, `nix/nixos-check.nix`, `scripts/cargo.sh`, `scripts/sync-upstream.sh`, `.github/workflows/fork.yml`,
 `crates/core/src/forge.rs` and `crates/core/src/forge/` (`gitea.rs`, `gitea_checks.rs`, `gitea_view.rs`, `tea.rs`),
 `crates/core/src/login_env/nixos.rs`, `crates/flow/src/finish/follow_up.rs`, `crates/flow/src/land/merged.rs`,
-`docs/gitea.md`, `docs/nixos.md`, `docs/follow-up.md`, and the tests `tests/fork.rs`, `tests/gitea.rs`,
-`tests/gitea_checks.rs`, `tests/gitea_forge.rs`, `tests/nixos_login_env.rs`, `tests/pull_requests_follow_up.rs`,
-`tests/common/tea.rs`.
+`docs/gitea.md`, `docs/nixos.md`, `docs/follow-up.md`, and the tests `tests/fork.rs` with `tests/fork/`
+(`nixos_login_env.rs`, `pull_requests_follow_up.rs`), `tests/gitea.rs` with `tests/gitea/` (`checks.rs`, `forge.rs`),
+and `tests/common/tea.rs`.
 
 **Upstream files the fork changes:**
 
@@ -129,9 +129,11 @@ there is no other way in. `git diff --stat upstream/main main` lists them as the
 | `scripts/check.sh`, `scripts/setup.sh` | Find cargo through `scripts/cargo.sh`, and say how to get Rust where it is missing (`nix develop`). |
 | `scripts/linker.sh`, `docs/linking.md` | A `mold` on the PATH where the pinned one cannot be installed (NixOS). |
 | `docs/install.md`, `docs/how-work-gets-done.md` | One line each linking the fork's pages. |
-| `tests/main.rs` | The fork's test modules. |
-| `tests/common/mod.rs`, `tests/common/gh.rs` | The fake `tea` in every test world; the fake gh knows a PR merged already. |
+| `tests/main.rs` | The fork's test modules, only `fork` and `gitea` (their other files are modules of those two); its header comment folded to two lines and no blank line, so the list stays within 300 lines. |
+| `tests/common/mod.rs`, `tests/common/gh.rs` | The fake `tea` in every test world, and its own `XDG_DATA_HOME` (NixOS sets one, so Devin's plugins were looked for in the real home); the fake gh knows a PR merged already, by number (`merged`, whose `get()` still says whether it merged any, as upstream's tests ask), and a `createUrl`. |
 | `tests/check_script.rs`, `tests/install.rs`, `tests/linking.rs`, `tests/take_over_more.rs` | Real-program tests that pass on NixOS (`bare_path`, coreutils as one program, mold on the PATH). |
+| `tests/autopilot_board.rs` | The autopilot frame keeps "the machine coordinator" when the host is named `machine`, as the NixOS test VM is. |
+| `tests/board_parts.rs`, `tests/automations_open.rs` | The settings page's screen one row taller: `merge.forge` is one more row. |
 | `README.md` | One line linking this page. |
 
 Upstream may take some of this one day (the follow-up PR, `bare_path`, the NixOS test fixes are not Nix-only in

@@ -40,7 +40,7 @@ jobs:
           GIT_AUTHOR_EMAIL: ci@example.com
           GIT_COMMITTER_NAME: ci
           GIT_COMMITTER_EMAIL: ci@example.com
-        run: npm run check gitea pull_requests_follow_up fork nixos_login_env login_env install
+        run: npm run check gitea fork login_env install
 
   nix:
     runs-on: ubuntu-24.04

@@ -12,6 +12,11 @@ use sw::actions::finish_line;
 use sw::housekeeping::poll_prs;
 use sw::json::*;
 
+/// A Gitea pull request's checks: its commit statuses (`merge.checks`).
+mod checks;
+/// Which forge a repo is on (`merge.forge`), and the remote's host as each forge reads it.
+mod forge;
+
 #[test]
 fn a_pull_request_on_gitea_is_opened_as_a_draft_made_ready_and_merged_with_the_merge_method_at_the_reviewed_commit() {
     let w = gitea_world(json!({ "review.when": "never", "merge.method": "rebase" }));

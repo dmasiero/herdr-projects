@@ -40,7 +40,7 @@ pub fn remembered(env_out: &str, fallback: &str) -> Obj {
     obj(json!({ "at": now(), "PATH": path, "gh": names(gh_login(env_out, |_| false)), "ssh": names(ssh_agent(env_out, |_| false)) }))
 }
 /// A login shell's whole environment (`env`, which any shell runs): what it prints before it (a greeting) is ignored.
-fn login_shell() -> Option<String> {
+pub fn login_shell() -> Option<String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
     let mut c = Command::new(shell);
     nixos::prepare(&mut c);

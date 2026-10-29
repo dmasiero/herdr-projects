@@ -15,15 +15,21 @@ pub struct Item { pub id: K, pub group: &'static str, pub key: String, pub label
 const MINE: &str = "your own settings: what every task starts from";
 /// A ctrl or alt key's line for this task right now ("" when it does nothing).
 pub fn label(s: &State, k: K, r: Option<&Obj>) -> String {
+    if r.is_none() { if let Some(w) = super::pilot::menu_label(s, k) { return w; } } // a coordinator's row
     let st = |x: &str| r.map(|r| r.s("stage") == x).unwrap_or(false);
     let next_scope = super::remotes::scope_next(s);
     match k {
         K::Yes => if st("pick") { "yes: keep the selected attempt".into() } else { "yes: approve the merge, say yes, retry, take it as it is".into() },
         K::SendBack => "send it back: tell the agent to fix it, or to continue".into(),
+        K::Delegate => if r.is_some_and(|r| !r.b("archivedAt")) { "put an agent on this task".into() } else { String::new() },
         K::NextAttempt => if r.map(|r| choosing(s, r)).unwrap_or(false) { "move to this task's next attempt".into() } else { String::new() },
         K::Stop => match r { None => "stop the agent, or remove the task".into(), Some(r) if r.s("stage") == "progress" => "put this task back in to do".into(), Some(r) if running(r) => "stop this task's agent".into(), _ => "remove this task".into() },
-        K::Archive => if r.map(|r| r.b("archivedAt")).unwrap_or(false) { "restore this task".into() } else { "archive this task".into() },
-        K::Pin => if r.map(|r| r.b("pinned")).unwrap_or(false) { "unpin this task".into() } else { "pin this task to the top".into() },
+        K::Archive => match (r, super::archive_project::says(s)) {
+            (None, w) if !w.is_empty() => if s.archive_view { format!("{w}, with its tasks as they were") } else { "archive this project with its tasks (after a yes when one works, waits or is to do)".into() },
+            _ => if r.map(|r| r.b("archivedAt")).unwrap_or(false) { "restore this task".into() } else { "archive this task".into() },
+        },
+        K::Pin => super::pinned::menu_label(s, r),
+        K::OpenLink => r.and_then(super::link::of).map(|(what, _)| format!("open its {what} in the browser")).unwrap_or_default(),
         K::Settings => match (&s.editing, r) {
             (Some(e), _) if e.whose.mine() => "back from your settings".into(),
             (Some(_), _) => "back from this task's settings".into(),
@@ -34,17 +40,17 @@ pub fn label(s: &State, k: K, r: Option<&Obj>) -> String {
         K::Find => "find: show only the tasks that match".into(),
         K::Free => if super::keys::on(s, K::Free, r) { "end the remote view that holds this pane at another size".into() } else { String::new() },
         K::Close => "twice: close the board".into(),
-        K::Call => if s.data.call.is_some() { "hang up the call".into() } else { "a voice call with whoever the chat talks to".into() },
+        K::Call => if s.data.call.is_some() { "hang up the call".into() } else if !crate::voice::calls_on() { "voice calls are off (voice.calls)".into() } else { "a voice call with whoever the chat talks to".into() },
         K::ChatMessage => format!("{} the chat's latest message", if s.chat_open { "hide" } else { "show" }),
         K::ChatScrollUp => "scroll the chat's message up".into(),
         K::ChatScrollDown => "scroll the chat's message down".into(),
         K::Side => format!("{} the side panel: this task, beside the list", if s.side { "hide" } else { "show" }),
         K::Panel => if s.full { "back to the list".into() } else { "show the whole task, full screen".into() },
         K::ArchiveView => format!("{} the archive", if s.archive_view { "hide" } else { "show" }),
-        K::ByRepo => if s.by_repo { "group by status".into() } else { "group by repo: see which repo each task is in".into() },
-        K::AllDone => if s.all_done { "show only the latest done".into() } else { "show all done".into() },
+        K::ByRepo => if s.by_machine { "group by status".into() } else if s.by_repo { "group by machine: each machine's tasks under its name".into() } else { "group by repo: see which repo each task is in".into() },
+        K::AllDone => if s.all_done { "hide the done tasks".into() } else { "show all done".into() },
         K::Scope => {
-            let to = if next_scope.is_empty() { "show this machine's tasks only".to_string() } else if next_scope == "*" { "show every machine's tasks".into() } else { format!("show only {next_scope}'s tasks") };
+            let to = if super::remotes::seeks(s) { "look for other machines".to_string() } else if next_scope.is_empty() { "show this machine's tasks only".to_string() } else if next_scope == "*" { "show every machine's tasks".into() } else { format!("show only {next_scope}'s tasks") };
             let now = if s.scope.is_empty() { "this machine".to_string() } else if s.scope == "*" { "every machine".into() } else { format!("only {}", s.scope) };
             format!("{to} (now: {now})")
         }
