@@ -15,6 +15,14 @@ follows upstream and adds a small layer that upstream chose not to take:
 Everything else is upstream's, unchanged. The fork is maintained privately for now; the end of this page lists what
 to do before it goes public.
 
+## Shepherdr
+
+Upstream's successor is Shepherdr: eliasstravik/herdr-projects was renamed to eliasstravik/shepherdr at 2.0.0, a
+rewrite in TypeScript. Its fork is [dmasiero/shepherdr](https://github.com/dmasiero/shepherdr), which carries this
+fork's Gitea pull requests (through `tea`) and follow-up pull requests over to it (its `FORK.md`). It is a separate
+repo, not a GitHub fork: this repo already is the owner's fork in that network. renix builds it
+(`pkgs/shepherdr.nix`).
+
 ## Branches
 
 - `upstream/main`: upstream as it is. Never changed here, never pushed to.
